@@ -1590,6 +1590,24 @@ const NoteCounterPage = memo(function NoteCounterPage() {
     { value: 1, label: '₹1', labelBn: '₹১', color: '#78909C', textColor: '#fff' },
   ]
 
+  // Keyboard detection for sticky bottom bar
+  const [keyboardHeight, setKeyboardHeight] = useState(0)
+
+  useEffect(() => {
+    const viewport = window.visualViewport
+    if (!viewport) return
+    const handleResize = () => {
+      const offsetHeight = window.innerHeight - viewport.height
+      setKeyboardHeight(offsetHeight > 50 ? offsetHeight : 0)
+    }
+    viewport.addEventListener('resize', handleResize)
+    viewport.addEventListener('scroll', handleResize)
+    return () => {
+      viewport.removeEventListener('resize', handleResize)
+      viewport.removeEventListener('scroll', handleResize)
+    }
+  }, [])
+
   const resetCounts = { '500': 0, '200': 0, '100': 0, '50': 0, '20': 0, '10': 0, '5': 0, '2': 0, '1': 0 }
 
   const total = denominations.reduce((sum, d) => sum + (d.value * (counts[String(d.value)] || 0)), 0)
@@ -1810,7 +1828,7 @@ const NoteCounterPage = memo(function NoteCounterPage() {
   }
 
   return (
-    <div className="pb-44 bg-gray-50 dark:bg-gray-950 min-h-screen">
+    <div className="bg-gray-50 dark:bg-gray-950 min-h-screen" style={{ paddingBottom: keyboardHeight > 0 ? `${keyboardHeight + 120}px` : '176px' }}>
       {/* ===== HEADER - Light/dark theme ===== */}
       <div className="bg-white dark:bg-gray-900 sticky top-0 z-30">
         <div className="px-4 py-3 flex items-center justify-between">
@@ -2075,7 +2093,7 @@ const NoteCounterPage = memo(function NoteCounterPage() {
       )}
 
       {/* ===== STICKY BOTTOM: GRAND TOTAL + ACTION BUTTONS ===== */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-gray-900 border-t border-border/50 shadow-[0_-4px_20px_rgba(0,0,0,0.1)]">
+      <div className="fixed left-0 right-0 z-50 bg-white dark:bg-gray-900 border-t border-border/50 shadow-[0_-4px_20px_rgba(0,0,0,0.1)] transition-[bottom] duration-200" style={{ bottom: keyboardHeight }}>
         {/* Grand Total */}
         <div className="px-3 pt-2 pb-1">
           <div className="bg-gradient-to-r from-amber-600 to-yellow-500 rounded-lg p-2.5 flex items-center justify-between">
