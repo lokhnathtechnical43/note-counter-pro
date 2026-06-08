@@ -1503,10 +1503,9 @@ function NoteCounterPage() {
   const [otherPlus, setOtherPlus] = useState(0)
   const [otherMinus, setOtherMinus] = useState(0)
 
-  // Amount to Payable/Receivable - reverse calculator
+  // Amount to Payable/Receivable - tally calculator
   const [targetAmount, setTargetAmount] = useState<string>('')
   const [targetMode, setTargetMode] = useState<'payable' | 'receivable'>('payable')
-  const [showBreakdown, setShowBreakdown] = useState(false)
 
   // Calculator state
   const [calcDisplay, setCalcDisplay] = useState('0')
@@ -1740,30 +1739,9 @@ function NoteCounterPage() {
     else if (val === '⌫') calcBackspace()
   }
 
-  // Calculate minimum note breakdown for a given amount
-  const calculateNoteBreakdown = (amount: number): Record<string, number> => {
-    const breakdown: Record<string, number> = {}
-    let remaining = Math.abs(amount)
-    for (const d of denominations) {
-      const count = Math.floor(remaining / d.value)
-      breakdown[String(d.value)] = count
-      remaining -= count * d.value
-    }
-    return breakdown
-  }
-
-  const targetBreakdown = targetAmount ? calculateNoteBreakdown(parseInt(targetAmount) || 0) : null
-  const targetBreakdownTotal = targetBreakdown ? denominations.reduce((sum, d) => sum + d.value * (targetBreakdown[String(d.value)] || 0), 0) : 0
-  const targetRemainder = (parseInt(targetAmount) || 0) - targetBreakdownTotal
-
-  // Apply breakdown to counter
-  const applyBreakdownToCounter = () => {
-    if (!targetBreakdown) return
-    setCounts(targetBreakdown)
-    setTargetAmount('')
-    setShowBreakdown(false)
-    toast({ title: language === 'bn' ? 'নোট সেট হয়েছে!' : 'Notes Set!', description: language === 'bn' ? `${formatCurrency(targetBreakdownTotal)} অনুযায়ী নোট কাউন্ট সেট হয়েছে` : `Note count set for ${formatCurrency(targetBreakdownTotal)}` })
-  }
+  // Calculate Payable/Receivable difference
+  const targetNum = parseInt(targetAmount) || 0
+  const tallyDiff = targetNum > 0 ? grandTotal - targetNum : 0
 
   const resetAll = () => {
     setCounts({ ...resetCounts })
@@ -1776,7 +1754,6 @@ function NoteCounterPage() {
     setMobileNumber('')
     setAccountNumber('')
     setTargetAmount('')
-    setShowBreakdown(false)
   }
 
   return (
@@ -1822,7 +1799,7 @@ function NoteCounterPage() {
           <div className="flex items-center justify-between p-3 pb-2">
             <div className="flex items-center gap-2">
               <Wallet className="w-4 h-4 text-yellow-400" />
-              <span className="text-gray-300 text-sm font-medium">{language === 'bn' ? 'অ্যামাউন্ট লিখুন' : 'Enter Amount'}</span>
+              <span className="text-gray-300 text-sm font-medium">{language === 'bn' ? 'অ্যামাউন্ট লিখুন (পেয়াবল/রিসিভেবল)' : 'Enter Amount (Payable/Receivable)'}</span>
             </div>
             {/* Toggle Payable / Receivable */}
             <div className="flex bg-[#0d1117] rounded-lg overflow-hidden border border-gray-700">
@@ -1846,69 +1823,96 @@ function NoteCounterPage() {
               <input
                 type="number"
                 value={targetAmount}
-                placeholder={language === 'bn' ? 'যেকোনো অ্যামাউন্ট লিখুন...' : 'Enter any amount...'}
-                onChange={e => { setTargetAmount(e.target.value); setShowBreakdown(true) }}
+                placeholder={targetMode === 'payable' ? (language === 'bn' ? 'যত টাকা দিতে হবে...' : 'Amount to pay...') : (language === 'bn' ? 'যত টাকা পাবেন...' : 'Amount to receive...')}
+                onChange={e => setTargetAmount(e.target.value)}
                 className="flex-1 h-10 px-3 bg-[#0d1117] text-white text-lg font-bold rounded-lg border border-gray-700 focus:border-yellow-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none placeholder:text-gray-600 placeholder:font-normal placeholder:text-sm"
                 min={0}
               />
               {targetAmount && (
-                <button onClick={() => { setTargetAmount(''); setShowBreakdown(false) }} className="text-gray-500 hover:text-white p-1">
+                <button onClick={() => setTargetAmount('')} className="text-gray-500 hover:text-white p-1">
                   <X className="w-5 h-5" />
                 </button>
               )}
             </div>
 
-            {/* Live breakdown preview */}
-            {showBreakdown && targetBreakdown && parseInt(targetAmount) > 0 && (
-              <div className="bg-[#0d1117] rounded-lg p-2.5 border border-gray-700/50">
+            {/* Live Tally Result */}
+            {targetNum > 0 && (
+              <div className="bg-[#0d1117] rounded-lg p-3 border border-gray-700/50">
+                {/* Comparison header */}
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-gray-400 text-xs font-medium">{language === 'bn' ? 'নোট ব্রেকডাউন' : 'Note Breakdown'}</span>
                   <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${targetMode === 'payable' ? 'bg-red-900/60 text-red-400' : 'bg-emerald-900/60 text-emerald-400'}`}>
                     {targetMode === 'payable' ? (language === 'bn' ? 'পেয়াবল' : 'Payable') : (language === 'bn' ? 'রিসিভেবল' : 'Receivable')}
                   </span>
                 </div>
-                <div className="space-y-1">
-                  {denominations.map(d => {
-                    const bc = targetBreakdown[String(d.value)] || 0
-                    if (bc === 0) return null
-                    return (
-                      <div key={d.value} className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-8 h-5 rounded flex items-center justify-center text-[9px] font-bold" style={{ backgroundColor: d.color, color: d.textColor }}>
-                            {d.value}
-                          </div>
-                          <span className="text-gray-400 text-xs">×</span>
-                          <span className="text-white text-sm font-bold">{bc}</span>
+                {/* Two amounts comparison */}
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="flex-1 bg-[#1a1a2e] rounded-lg p-2 text-center border border-gray-700/40">
+                    <p className="text-gray-400 text-[10px] mb-0.5">{targetMode === 'payable' ? (language === 'bn' ? 'দিতে হবে' : 'To Pay') : (language === 'bn' ? 'পাবেন' : 'To Receive')}</p>
+                    <p className="text-yellow-400 text-base font-bold">{formatCurrency(targetNum)}</p>
+                  </div>
+                  <div className="text-gray-500 text-lg font-bold">VS</div>
+                  <div className="flex-1 bg-[#1a1a2e] rounded-lg p-2 text-center border border-gray-700/40">
+                    <p className="text-gray-400 text-[10px] mb-0.5">{language === 'bn' ? 'কাউন্ট হয়েছে' : 'Counted'}</p>
+                    <p className="text-white text-base font-bold">{formatCurrency(grandTotal)}</p>
+                  </div>
+                </div>
+
+                {/* Result */}
+                {tallyDiff === 0 ? (
+                  <div className="bg-emerald-900/30 border border-emerald-600/40 rounded-lg p-2.5 text-center">
+                    <p className="text-emerald-400 text-sm font-bold">✓ {language === 'bn' ? 'সমান! হিসাব মিলেছে' : 'Equal! Tally matched'}</p>
+                  </div>
+                ) : targetMode === 'payable' ? (
+                  tallyDiff > 0 ? (
+                    <div className="bg-emerald-900/30 border border-emerald-600/40 rounded-lg p-2.5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-emerald-400 text-xs font-medium">{language === 'bn' ? 'বেশি হয়েছে' : 'Excess Amount'}</p>
+                          <p className="text-emerald-300 text-lg font-bold">{formatCurrency(Math.abs(tallyDiff))}</p>
                         </div>
-                        <span className="text-yellow-400 text-xs font-bold">{formatCurrency(d.value * bc)}</span>
+                        <div className="bg-emerald-800/50 rounded-lg px-2.5 py-1.5">
+                          <p className="text-emerald-300 text-xs font-bold">{language === 'bn' ? 'কমাতে হবে' : 'Need to Reduce'}</p>
+                        </div>
                       </div>
-                    )
-                  })}
-                </div>
-                {/* Total & Remainder */}
-                <div className="mt-2 pt-2 border-t border-gray-700/50 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-400 text-xs">{language === 'bn' ? 'মোট নোট' : 'Total Notes'}</span>
-                    <span className="text-white text-xs font-bold">{Object.values(targetBreakdown).reduce((s, c) => s + c, 0)} {language === 'bn' ? 'টি' : 'pcs'}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-400 text-xs">{language === 'bn' ? 'নোটে মোট' : 'Notes Total'}</span>
-                    <span className="text-yellow-400 text-sm font-bold">{formatCurrency(targetBreakdownTotal)}</span>
-                  </div>
-                  {targetRemainder > 0 && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-orange-400 text-xs">{language === 'bn' ? 'বাকি (কয়েন)' : 'Remaining (coins)'}</span>
-                      <span className="text-orange-400 text-xs font-bold">₹{targetRemainder}</span>
                     </div>
-                  )}
-                </div>
-                {/* Apply button */}
-                <button
-                  onClick={applyBreakdownToCounter}
-                  className="w-full mt-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg text-xs font-bold active:scale-95 transition-all"
-                >
-                  {language === 'bn' ? '✓ কাউন্টারে সেট করুন' : '✓ Set to Counter'}
-                </button>
+                  ) : (
+                    <div className="bg-red-900/30 border border-red-600/40 rounded-lg p-2.5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-red-400 text-xs font-medium">{language === 'bn' ? 'কম হয়েছে' : 'Shortfall'}</p>
+                          <p className="text-red-300 text-lg font-bold">{formatCurrency(Math.abs(tallyDiff))}</p>
+                        </div>
+                        <div className="bg-red-800/50 rounded-lg px-2.5 py-1.5">
+                          <p className="text-red-300 text-xs font-bold">{language === 'bn' ? 'দিতে হবে' : 'Need to Pay'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                ) : tallyDiff > 0 ? (
+                  <div className="bg-amber-900/30 border border-amber-600/40 rounded-lg p-2.5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-amber-400 text-xs font-medium">{language === 'bn' ? 'বেশি পাওয়া গেছে' : 'Excess Received'}</p>
+                        <p className="text-amber-300 text-lg font-bold">{formatCurrency(Math.abs(tallyDiff))}</p>
+                      </div>
+                      <div className="bg-amber-800/50 rounded-lg px-2.5 py-1.5">
+                        <p className="text-amber-300 text-xs font-bold">{language === 'bn' ? 'কমাতে হবে' : 'Need to Reduce'}</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-blue-900/30 border border-blue-600/40 rounded-lg p-2.5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-blue-400 text-xs font-medium">{language === 'bn' ? 'কম পাওয়া গেছে' : 'Shortfall Received'}</p>
+                        <p className="text-blue-300 text-lg font-bold">{formatCurrency(Math.abs(tallyDiff))}</p>
+                      </div>
+                      <div className="bg-blue-800/50 rounded-lg px-2.5 py-1.5">
+                        <p className="text-blue-300 text-xs font-bold">{language === 'bn' ? 'পেতে হবে' : 'Need to Receive'}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
