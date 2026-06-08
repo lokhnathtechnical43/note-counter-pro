@@ -2174,32 +2174,216 @@ function DocScannerPage() {
     if (!doc || !cropCorners) return
     const currentCorners = cropCorners
     const doCrop = (img: HTMLImageElement) => {
-      const nw = img.naturalWidth
-      const nh = img.naturalHeight
+      let nw = img.naturalWidth
+      let nh = img.naturalHeight
       if (!nw || !nh) return
-      // Bounding box of the 4 corners
-      const minX = Math.min(currentCorners.tl.x, currentCorners.tr.x, currentCorners.bl.x, currentCorners.br.x)
-      const minY = Math.min(currentCorners.tl.y, currentCorners.tr.y, currentCorners.bl.y, currentCorners.br.y)
-      const maxX = Math.max(currentCorners.tl.x, currentCorners.tr.x, currentCorners.bl.x, currentCorners.br.x)
-      const maxY = Math.max(currentCorners.tl.y, currentCorners.tr.y, currentCorners.bl.y, currentCorners.br.y)
-      const x = Math.round(minX * nw)
-      const y = Math.round(minY * nh)
-      const w = Math.round((maxX - minX) * nw)
-      const h = Math.round((maxY - minY) * nh)
-      if (w < 20 || h < 20) { toast({ title: language === 'bn' ? 'ক্রপ এরিয়া ছোট হয়েছে' : 'Crop area too small', variant: 'destructive' }); return }
+
+      // For perspective transform, limit max dimension to 2000px for performance
+      // (pixel-by-pixel processing is slow on very large images)
+      const MAX_DIM = 2000
+      let scale = 1
+      if (nw > MAX_DIM || nh > MAX_DIM) {
+        scale = Math.min(MAX_DIM / nw, MAX_DIM / nh)
+        nw = Math.round(nw * scale)
+        nh = Math.round(nh * scale)
+      }
+
+      // Source points: the 4 corners the user selected on the original image (in pixels)
+      const srcPts = [
+        { x: currentCorners.tl.x * nw, y: currentCorners.tl.y * nh }, // top-left
+        { x: currentCorners.tr.x * nw, y: currentCorners.tr.y * nh }, // top-right
+        { x: currentCorners.br.x * nw, y: currentCorners.br.y * nh }, // bottom-right
+        { x: currentCorners.bl.x * nw, y: currentCorners.bl.y * nh }, // bottom-left
+      ]
+
+      // Destination: a perfect rectangle (CamScanner-style perspective correction!)
+      // Calculate output dimensions from the selected edges
+      const topWidth = Math.sqrt(Math.pow(srcPts[1].x - srcPts[0].x, 2) + Math.pow(srcPts[1].y - srcPts[0].y, 2))
+      const bottomWidth = Math.sqrt(Math.pow(srcPts[2].x - srcPts[3].x, 2) + Math.pow(srcPts[2].y - srcPts[3].y, 2))
+      const leftHeight = Math.sqrt(Math.pow(srcPts[3].x - srcPts[0].x, 2) + Math.pow(srcPts[3].y - srcPts[0].y, 2))
+      const rightHeight = Math.sqrt(Math.pow(srcPts[2].x - srcPts[1].x, 2) + Math.pow(srcPts[2].y - srcPts[1].y, 2))
+      const outW = Math.round(Math.max(topWidth, bottomWidth))
+      const outH = Math.round(Math.max(leftHeight, rightHeight))
+
+      if (outW < 20 || outH < 20) { toast({ title: language === 'bn' ? 'ক্রপ এরিয়া ছোট হয়েছে' : 'Crop area too small', variant: 'destructive' }); return }
+
+      // Destination points: perfect rectangle
+      const dstPts = [
+        { x: 0, y: 0 },         // top-left
+        { x: outW, y: 0 },       // top-right
+        { x: outW, y: outH },    // bottom-right
+        { x: 0, y: outH },       // bottom-left
+      ]
+
+      // Compute perspective transform matrix using direct computation
+      // We solve for the 3x3 homography matrix H such that: dst = H * src
+      // Using the 4 point correspondences (8 equations, 8 unknowns)
+      const perspectiveTransform = () => {
+        // Build the system of equations: A * h = b
+        // For each point correspondence (src -> dst), we get 2 equations
+        const A: number[][] = []
+        const b: number[] = []
+
+        for (let i = 0; i < 4; i++) {
+          const sx = srcPts[i].x, sy = srcPts[i].y
+          const dx = dstPts[i].x, dy = dstPts[i].y
+          A.push([sx, sy, 1, 0, 0, 0, -dx * sx, -dx * sy])
+          b.push(dx)
+          A.push([0, 0, 0, sx, sy, 1, -dy * sx, -dy * sy])
+          b.push(dy)
+        }
+
+        // Solve using Gaussian elimination
+        const n = 8
+        const aug = A.map((row, i) => [...row, b[i]])
+
+        for (let col = 0; col < n; col++) {
+          // Find pivot
+          let maxRow = col
+          for (let row = col + 1; row < n; row++) {
+            if (Math.abs(aug[row][col]) > Math.abs(aug[maxRow][col])) maxRow = row
+          }
+          ;[aug[col], aug[maxRow]] = [aug[maxRow], aug[col]]
+
+          const pivot = aug[col][col]
+          if (Math.abs(pivot) < 1e-10) return null
+
+          for (let j = col; j <= n; j++) aug[col][j] /= pivot
+          for (let row = 0; row < n; row++) {
+            if (row === col) continue
+            const factor = aug[row][col]
+            for (let j = col; j <= n; j++) aug[row][j] -= factor * aug[col][j]
+          }
+        }
+
+        const h = aug.map(row => row[n])
+        // h = [a,b,c,d,e,f,g,h] => H = [[a,b,c],[d,e,f],[g,h,1]]
+        return h
+      }
+
+      const h = perspectiveTransform()
+      if (!h) {
+        // Fallback: simple rectangular crop
+        const minX = Math.min(...srcPts.map(p => p.x))
+        const minY = Math.min(...srcPts.map(p => p.y))
+        const maxX = Math.max(...srcPts.map(p => p.x))
+        const maxY = Math.max(...srcPts.map(p => p.y))
+        const canvas = document.createElement('canvas')
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return
+        canvas.width = Math.round(maxX - minX)
+        canvas.height = Math.round(maxY - minY)
+        ctx.drawImage(img, minX, minY, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height)
+        const croppedData = canvas.toDataURL('image/jpeg', 0.85)
+        setScannedDocs(prev => prev.map(d => d.id === editingDoc ? { ...d, data: croppedData, filter: 'original' as ScanFilter, savedToVault: false } : d))
+        setCropMode(false)
+        setCropCorners(null)
+        dragRef.current = null
+        setDraggingHandle(null)
+        toast({ title: language === 'bn' ? 'ক্রপ হয়েছে!' : 'Cropped!' })
+        return
+      }
+
+      // Apply perspective transform pixel by pixel (inverse mapping)
       const canvas = document.createElement('canvas')
+      canvas.width = outW
+      canvas.height = outH
       const ctx = canvas.getContext('2d')
       if (!ctx) return
-      canvas.width = w
-      canvas.height = h
-      ctx.drawImage(img, x, y, w, h, 0, 0, w, h)
+
+      // Draw original image to a temp canvas (scaled if needed) to get pixel data
+      const tempCanvas = document.createElement('canvas')
+      tempCanvas.width = nw
+      tempCanvas.height = nh
+      const tempCtx = tempCanvas.getContext('2d')
+      if (!tempCtx) return
+      if (scale < 1) {
+        tempCtx.drawImage(img, 0, 0, nw, nh)
+      } else {
+        tempCtx.drawImage(img, 0, 0)
+      }
+      const srcData = tempCtx.getImageData(0, 0, nw, nh)
+      const srcPixels = srcData.data
+
+      const dstData = ctx.createImageData(outW, outH)
+      const dstPixels = dstData.data
+
+      // Inverse mapping: for each destination pixel, find the source pixel
+      // dst -> src using inverse homography
+      // H = [[h[0],h[1],h[2]],[h[3],h[4],h[5]],[h[6],h[7],1]]
+      // For inverse, we need H^-1, but simpler: compute H for src->dst, then invert
+      // Actually, we already computed src->dst. For inverse mapping we need dst->src.
+      // Let's compute the inverse by building the reverse system
+
+      // Build inverse: dstPts -> srcPts
+      const A2: number[][] = []
+      const b2: number[] = []
+      for (let i = 0; i < 4; i++) {
+        const dx = dstPts[i].x, dy = dstPts[i].y
+        const sx = srcPts[i].x, sy = srcPts[i].y
+        A2.push([dx, dy, 1, 0, 0, 0, -sx * dx, -sx * dy])
+        b2.push(sx)
+        A2.push([0, 0, 0, dx, dy, 1, -sy * dx, -sy * dy])
+        b2.push(sy)
+      }
+
+      const aug2 = A2.map((row, i) => [...row, b2[i]])
+      for (let col = 0; col < 8; col++) {
+        let maxRow = col
+        for (let row = col + 1; row < 8; row++) {
+          if (Math.abs(aug2[row][col]) > Math.abs(aug2[maxRow][col])) maxRow = row
+        }
+        ;[aug2[col], aug2[maxRow]] = [aug2[maxRow], aug2[col]]
+        const pivot = aug2[col][col]
+        if (Math.abs(pivot) < 1e-10) return
+        for (let j = col; j <= 8; j++) aug2[col][j] /= pivot
+        for (let row = 0; row < 8; row++) {
+          if (row === col) continue
+          const factor = aug2[row][col]
+          for (let j = col; j <= 8; j++) aug2[row][j] -= factor * aug2[col][j]
+        }
+      }
+      const ih = aug2.map(row => row[8])
+
+      // For each destination pixel, find source pixel and copy
+      for (let dy = 0; dy < outH; dy++) {
+        for (let dx = 0; dx < outW; dx++) {
+          const w = ih[6] * dx + ih[7] * dy + 1
+          const sx = (ih[0] * dx + ih[1] * dy + ih[2]) / w
+          const sy = (ih[3] * dx + ih[4] * dy + ih[5]) / w
+
+          // Bilinear interpolation
+          const sx0 = Math.floor(sx), sy0 = Math.floor(sy)
+          const sx1 = sx0 + 1, sy1 = sy0 + 1
+          const fx = sx - sx0, fy = sy - sy0
+
+          if (sx0 >= 0 && sx1 < nw && sy0 >= 0 && sy1 < nh) {
+            const idx00 = (sy0 * nw + sx0) * 4
+            const idx01 = (sy0 * nw + sx1) * 4
+            const idx10 = (sy1 * nw + sx0) * 4
+            const idx11 = (sy1 * nw + sx1) * 4
+
+            const dstIdx = (dy * outW + dx) * 4
+            for (let c = 0; c < 4; c++) {
+              dstPixels[dstIdx + c] = Math.round(
+                srcPixels[idx00 + c] * (1 - fx) * (1 - fy) +
+                srcPixels[idx01 + c] * fx * (1 - fy) +
+                srcPixels[idx10 + c] * (1 - fx) * fy +
+                srcPixels[idx11 + c] * fx * fy
+              )
+            }
+          }
+        }
+      }
+
+      ctx.putImageData(dstData, 0, 0)
       const croppedData = canvas.toDataURL('image/jpeg', 0.85)
       setScannedDocs(prev => prev.map(d => d.id === editingDoc ? { ...d, data: croppedData, filter: 'original' as ScanFilter, savedToVault: false } : d))
       setCropMode(false)
       setCropCorners(null)
       dragRef.current = null
       setDraggingHandle(null)
-      toast({ title: language === 'bn' ? 'ক্রপ হয়েছে!' : 'Cropped!' })
+      toast({ title: language === 'bn' ? 'ক্রপ ও সোজা হয়েছে!' : 'Cropped & Straightened!' })
     }
     // Use pre-loaded image if ready, otherwise load fresh with onload
     if (magnifierImgRef.current && magnifierImgRef.current.complete && magnifierImgRef.current.naturalWidth > 0) {
