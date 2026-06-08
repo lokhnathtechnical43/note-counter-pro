@@ -4,7 +4,7 @@
 - Environments: .env
 
 ✓ Starting...
-✓ Ready in 535ms
- GET / 200 in 1013ms (compile: 873ms, render: 140ms)
- GET / 200 in 30ms (compile: 3ms, render: 26ms)
- in 30ms (compile: 3ms, render: 26ms)
+✓ Ready in 1017ms
+⚠ Blocked cross-origin request from 21.0.11.84 to /_next/* resource. To allow this, configure "allowedDevOrigins" in next.config
+Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins
+ GET / 200 in 1322ms (compile: 1145ms, render: 177ms)

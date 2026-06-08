@@ -26,7 +26,7 @@ import {
   AlertCircle, FileText, Search, Moon, Sun, Download, Upload, Pencil,
   ChevronRight, MoreVertical, Star, StarOff, RefreshCw, Activity,
   PieChart, BarChart3, Users, Settings, HelpCircle, Info, ArrowRight,
-  Hash, IndianRupee, Scan, FileImage, FileEdit, FileType, Pause, Play
+  Hash, IndianRupee, Scan, FileImage, FileEdit, FileType, Pause, Play, Grid3X3, List
 } from 'lucide-react'
 
 // ============ TYPES ============
@@ -1654,10 +1654,67 @@ function NoteCounterPage() {
 }
 
 // ============ DOC SCANNER ============
+type ScanFilter = 'original' | 'bw' | 'grayscale' | 'photo' | 'sepia'
+
+interface ScanDoc {
+  id: string
+  data: string
+  filter: ScanFilter
+  savedToVault: boolean
+  vaultId?: string
+  name?: string
+  category?: string
+}
+
 function DocScannerPage() {
+  const { language, documents, setDocuments } = useAppStore()
+  const t = translations[language]
   const [scanning, setScanning] = useState(false)
-  const [scannedDocs, setScannedDocs] = useState<string[]>([])
+  const [scannedDocs, setScannedDocs] = useState<ScanDoc[]>([])
+  const [editingDoc, setEditingDoc] = useState<string | null>(null)
+  const [cropMode, setCropMode] = useState(false)
+  const [collageMode, setCollageMode] = useState(false)
+  const [selectedForCollage, setSelectedForCollage] = useState<Set<string>>(new Set())
+  const [collageLayout, setCollageLayout] = useState<'2x1' | '1x2' | '2x2'>('2x2')
+  const [activeTab, setActiveTab] = useState<'new' | 'vault'>('new')
+  const [autoSave, setAutoSave] = useState(false)
   const videoRef = React.useRef<HTMLVideoElement>(null)
+  const canvasRef = React.useRef<HTMLCanvasElement>(null)
+  const [cropStart, setCropStart] = useState<{ x: number; y: number } | null>(null)
+  const [cropEnd, setCropEnd] = useState<{ x: number; y: number } | null>(null)
+  const [naturalSize, setNaturalSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 })
+  const [vaultLoaded, setVaultLoaded] = useState(false)
+
+  // Load vault documents on mount
+  const loadVaultDocs = useCallback(async () => {
+    try {
+      const d = await apiFetch('/documents')
+      setDocuments(d.documents)
+      setVaultLoaded(true)
+    } catch { /* */ }
+  }, [setDocuments])
+
+  useEffect(() => { loadVaultDocs() }, [loadVaultDocs])
+
+  // Get vault scanned/collage docs
+  const vaultScanDocs: ScanDoc[] = (documents as Document[])
+    .filter(doc => doc.category === 'scanned' || doc.category === 'collage')
+    .filter(doc => doc.type?.includes('image') && doc.data)
+    .map(doc => ({
+      id: `vault_${doc.id}`,
+      data: doc.data,
+      filter: 'original' as ScanFilter,
+      savedToVault: true,
+      vaultId: doc.id,
+      name: doc.name,
+      category: doc.category
+    }))
+
+  const allDocs = [...scannedDocs, ...vaultScanDocs]
+  const unsavedDocs = scannedDocs.filter(d => !d.savedToVault)
+  const savedCount = scannedDocs.filter(d => d.savedToVault).length + vaultScanDocs.length
+
+  const generateId = () => `doc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
 
   const startScan = async () => {
     try {
@@ -1668,7 +1725,7 @@ function DocScannerPage() {
         videoRef.current.play()
       }
     } catch {
-      toast({ title: 'Camera Error', description: 'Could not access camera. Please grant permission.', variant: 'destructive' })
+      toast({ title: t.error, description: language === 'bn' ? 'ক্যামেরা অ্যাক্সেস করা যায়নি। অনুগ্রহ করে পারমিশন দিন বা ছবি আপলোড করুন।' : 'Could not access camera. Please grant permission or upload an image instead.', variant: 'destructive' })
       setScanning(false)
     }
   }
@@ -1679,40 +1736,512 @@ function DocScannerPage() {
     canvas.width = videoRef.current.videoWidth
     canvas.height = videoRef.current.videoHeight
     canvas.getContext('2d')?.drawImage(videoRef.current, 0, 0)
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.8)
-    setScannedDocs(prev => [...prev, dataUrl])
-    toast({ title: 'Page captured!' })
-    
-    // Stop camera
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+    const newDoc: ScanDoc = { id: generateId(), data: dataUrl, filter: 'original', savedToVault: false }
+    setScannedDocs(prev => [...prev, newDoc])
+    toast({ title: language === 'bn' ? 'পেজ ক্যাপচার হয়েছে!' : 'Page captured!' })
     const stream = videoRef.current.srcObject as MediaStream
     stream?.getTracks().forEach(t => t.stop())
     setScanning(false)
+    if (autoSave) saveSingleToVault(newDoc)
   }
 
-  const saveToVault = async (data: string) => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files) return
+    Array.from(files).forEach(file => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const newDoc: ScanDoc = { id: generateId(), data: reader.result as string, filter: 'original', savedToVault: false }
+        setScannedDocs(prev => [...prev, newDoc])
+        toast({ title: language === 'bn' ? 'ছবি যোগ হয়েছে!' : 'Image added!' })
+        if (autoSave) saveSingleToVault(newDoc)
+      }
+      reader.readAsDataURL(file)
+    })
+    e.target.value = ''
+  }
+
+  const applyFilter = (docId: string, filter: ScanFilter) => {
+    setScannedDocs(prev => prev.map(d => d.id === docId ? { ...d, filter, savedToVault: false } : d))
+  }
+
+  const getFilteredData = (doc: { data: string; filter: string }): string => {
+    if (doc.filter === 'original') return doc.data
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return doc.data
+    const img = new Image()
+    img.src = doc.data
+    canvas.width = img.naturalWidth || 800
+    canvas.height = img.naturalHeight || 600
+    ctx.drawImage(img, 0, 0)
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const data = imageData.data
+    if (doc.filter === 'bw') {
+      for (let i = 0; i < data.length; i += 4) {
+        const avg = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114
+        const val = avg > 128 ? 255 : 0
+        data[i] = val; data[i + 1] = val; data[i + 2] = val
+      }
+    } else if (doc.filter === 'grayscale') {
+      for (let i = 0; i < data.length; i += 4) {
+        const avg = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114
+        data[i] = avg; data[i + 1] = avg; data[i + 2] = avg
+      }
+    } else if (doc.filter === 'photo') {
+      for (let i = 0; i < data.length; i += 4) {
+        data[i] = Math.min(255, data[i] * 1.15)
+        data[i + 1] = Math.min(255, data[i + 1] * 1.15)
+        data[i + 2] = Math.min(255, data[i + 2] * 1.15)
+      }
+    } else if (doc.filter === 'sepia') {
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i], g = data[i + 1], b = data[i + 2]
+        data[i] = Math.min(255, r * 0.393 + g * 0.769 + b * 0.189)
+        data[i + 1] = Math.min(255, r * 0.349 + g * 0.686 + b * 0.168)
+        data[i + 2] = Math.min(255, r * 0.272 + g * 0.534 + b * 0.131)
+      }
+    }
+    ctx.putImageData(imageData, 0, 0)
+    return canvas.toDataURL('image/jpeg', 0.85)
+  }
+
+  const removeDoc = (docId: string) => {
+    setScannedDocs(prev => prev.filter(d => d.id !== docId))
+    if (editingDoc === docId) setEditingDoc(null)
+  }
+
+  const saveSingleToVault = async (doc: ScanDoc) => {
+    try {
+      const filteredData = getFilteredData(doc)
+      const filterLabel = doc.filter !== 'original' ? `_${doc.filter === 'bw' ? 'B&W' : doc.filter === 'grayscale' ? 'Gray' : doc.filter === 'sepia' ? 'Sepia' : 'Enhanced'}` : ''
+      await apiFetch('/documents', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: `Scan_${new Date().toISOString().replace(/[:.]/g, '-')}${filterLabel}`,
+          type: 'image/jpeg',
+          data: filteredData,
+          category: 'scanned'
+        })
+      })
+      // Mark as saved in local state
+      setScannedDocs(prev => prev.map(d => d.id === doc.id ? { ...d, savedToVault: true } : d))
+      loadVaultDocs()
+      toast({ title: language === 'bn' ? 'ডকভল্টে সেভ হয়েছে!' : 'Saved to DocVault!', description: language === 'bn' ? 'ডকুমেন্ট সফলভাবে সেভ হয়েছে' : 'Document saved successfully' })
+    } catch {
+      toast({ title: t.error, description: language === 'bn' ? 'ডকুমেন্ট সেভ করতে ব্যর্থ' : 'Failed to save document', variant: 'destructive' })
+    }
+  }
+
+  const saveAllToVault = async () => {
+    const unsaved = scannedDocs.filter(d => !d.savedToVault)
+    if (unsaved.length === 0) {
+      toast({ title: language === 'bn' ? 'সব ডকুমেন্ট ইতিমধ্যে সেভ করা আছে' : 'All documents are already saved' })
+      return
+    }
+    for (const doc of unsaved) {
+      await saveSingleToVault(doc)
+    }
+    toast({ title: language === 'bn' ? `${unsaved.length}টি ডকুমেন্ট ডকভল্টে সেভ হয়েছে!` : `${unsaved.length} documents saved to DocVault!` })
+  }
+
+  const handleCropMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!cropMode) return
+    const rect = canvasRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const x = ((e.clientX - rect.left) / rect.width) * naturalSize.w
+    const y = ((e.clientY - rect.top) / rect.height) * naturalSize.h
+    setCropStart({ x, y })
+    setCropEnd(null)
+  }
+
+  const handleCropMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!cropMode || !cropStart) return
+    const rect = canvasRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const x = ((e.clientX - rect.left) / rect.width) * naturalSize.w
+    const y = ((e.clientY - rect.top) / rect.height) * naturalSize.h
+    setCropEnd({ x, y })
+    drawEditorCanvas()
+  }
+
+  const handleCropMouseUp = () => {
+    if (!cropMode || !cropStart || !cropEnd) return
+    const doc = scannedDocs.find(d => d.id === editingDoc)
+    if (!doc) return
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const img = new Image()
+    img.src = doc.data
+    const x = Math.min(cropStart.x, cropEnd.x)
+    const y = Math.min(cropStart.y, cropEnd.y)
+    const w = Math.abs(cropEnd.x - cropStart.x)
+    const h = Math.abs(cropEnd.y - cropStart.y)
+    if (w < 10 || h < 10) { setCropStart(null); setCropEnd(null); return }
+    canvas.width = w
+    canvas.height = h
+    ctx.drawImage(img, x, y, w, h, 0, 0, w, h)
+    const croppedData = canvas.toDataURL('image/jpeg', 0.85)
+    setScannedDocs(prev => prev.map(d => d.id === editingDoc ? { ...d, data: croppedData, filter: 'original' as ScanFilter, savedToVault: false } : d))
+    setCropStart(null)
+    setCropEnd(null)
+    setCropMode(false)
+    toast({ title: language === 'bn' ? 'ক্রপ হয়েছে!' : 'Cropped!' })
+  }
+
+  const drawEditorCanvas = useCallback(() => {
+    const canvas = canvasRef.current
+    const doc = scannedDocs.find(d => d.id === editingDoc)
+    if (!canvas || !doc) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const img = new Image()
+    img.onload = () => {
+      canvas.width = img.naturalWidth
+      canvas.height = img.naturalHeight
+      setNaturalSize({ w: img.naturalWidth, h: img.naturalHeight })
+      ctx.drawImage(img, 0, 0)
+      // Apply live filter preview
+      if (doc.filter !== 'original') {
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        const data = imageData.data
+        if (doc.filter === 'bw') {
+          for (let i = 0; i < data.length; i += 4) {
+            const avg = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114
+            const val = avg > 128 ? 255 : 0
+            data[i] = val; data[i + 1] = val; data[i + 2] = val
+          }
+        } else if (doc.filter === 'grayscale') {
+          for (let i = 0; i < data.length; i += 4) {
+            const avg = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114
+            data[i] = avg; data[i + 1] = avg; data[i + 2] = avg
+          }
+        } else if (doc.filter === 'photo') {
+          for (let i = 0; i < data.length; i += 4) {
+            data[i] = Math.min(255, data[i] * 1.15)
+            data[i + 1] = Math.min(255, data[i + 1] * 1.15)
+            data[i + 2] = Math.min(255, data[i + 2] * 1.15)
+          }
+        } else if (doc.filter === 'sepia') {
+          for (let i = 0; i < data.length; i += 4) {
+            const r = data[i], g = data[i + 1], b = data[i + 2]
+            data[i] = Math.min(255, r * 0.393 + g * 0.769 + b * 0.189)
+            data[i + 1] = Math.min(255, r * 0.349 + g * 0.686 + b * 0.168)
+            data[i + 2] = Math.min(255, r * 0.272 + g * 0.534 + b * 0.131)
+          }
+        }
+        ctx.putImageData(imageData, 0, 0)
+      }
+      // Draw crop overlay
+      if (cropStart && cropEnd) {
+        ctx.strokeStyle = '#22c55e'
+        ctx.lineWidth = 3
+        ctx.setLineDash([8, 4])
+        const cx = Math.min(cropStart.x, cropEnd.x)
+        const cy = Math.min(cropStart.y, cropEnd.y)
+        const cw = Math.abs(cropEnd.x - cropStart.x)
+        const ch = Math.abs(cropEnd.y - cropStart.y)
+        ctx.strokeRect(cx, cy, cw, ch)
+        // Dim outside area
+        ctx.fillStyle = 'rgba(0,0,0,0.4)'
+        ctx.fillRect(0, 0, canvas.width, cy)
+        ctx.fillRect(0, cy, cx, ch)
+        ctx.fillRect(cx + cw, cy, canvas.width - cx - cw, ch)
+        ctx.fillRect(0, cy + ch, canvas.width, canvas.height - cy - ch)
+        ctx.setLineDash([])
+      }
+    }
+    img.src = doc.data
+  }, [editingDoc, scannedDocs, cropStart, cropEnd])
+
+  useEffect(() => {
+    if (editingDoc) drawEditorCanvas()
+  }, [editingDoc, drawEditorCanvas, scannedDocs])
+
+  // Generate collage
+  const generateCollage = (): string | null => {
+    const selectedDocs = allDocs.filter(d => selectedForCollage.has(d.id))
+    if (selectedDocs.length === 0) return null
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+    const gap = 8
+    const baseSize = 800
+
+    const drawImageFitted = (imgUrl: string, x: number, y: number, cellW: number, cellH: number) => {
+      const img = new Image()
+      img.src = getFilteredData({ data: imgUrl, filter: 'original' })
+      const scale = Math.min(cellW / (img.width || 1), cellH / (img.height || 1))
+      const w = (img.width || cellW) * scale
+      const h = (img.height || cellH) * scale
+      ctx.drawImage(img, x + (cellW - w) / 2, y + (cellH - h) / 2, w, h)
+    }
+
+    if (collageLayout === '2x1') {
+      canvas.width = baseSize; canvas.height = baseSize / 2
+      const cellW = (baseSize - gap) / 2; const cellH = canvas.height
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height)
+      selectedDocs.slice(0, 2).forEach((doc, i) => {
+        drawImageFitted(getFilteredData(doc), i * (cellW + gap), 0, cellW, cellH)
+      })
+    } else if (collageLayout === '1x2') {
+      canvas.width = baseSize / 2; canvas.height = baseSize
+      const cellW = canvas.width; const cellH = (baseSize - gap) / 2
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height)
+      selectedDocs.slice(0, 2).forEach((doc, i) => {
+        drawImageFitted(getFilteredData(doc), 0, i * (cellH + gap), cellW, cellH)
+      })
+    } else {
+      canvas.width = baseSize; canvas.height = baseSize
+      const cellW = (baseSize - gap) / 2; const cellH = (baseSize - gap) / 2
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height)
+      selectedDocs.slice(0, 4).forEach((doc, i) => {
+        const col = i % 2; const row = Math.floor(i / 2)
+        const x = col * (cellW + gap); const y = row * (cellH + gap)
+        drawImageFitted(getFilteredData(doc), x, y, cellW, cellH)
+      })
+    }
+    return canvas.toDataURL('image/jpeg', 0.9)
+  }
+
+  const saveCollageToVault = async () => {
+    const collageData = generateCollage()
+    if (!collageData) return
     try {
       await apiFetch('/documents', {
         method: 'POST',
-        body: JSON.stringify({ name: `Scan_${Date.now()}`, type: 'image/jpeg', data, category: 'scanned' })
+        body: JSON.stringify({ name: `Collage_${Date.now()}`, type: 'image/jpeg', data: collageData, category: 'collage' })
       })
-      toast({ title: 'Saved to DocVault!' })
-    } catch { /* */ }
+      toast({ title: language === 'bn' ? 'কলাজ ডকভল্টে সেভ হয়েছে!' : 'Collage saved to DocVault!' })
+      setCollageMode(false)
+      setSelectedForCollage(new Set())
+      loadVaultDocs()
+    } catch {
+      toast({ title: language === 'bn' ? 'কলাজ সেভ করতে ত্রুটি' : 'Error saving collage', variant: 'destructive' })
+    }
   }
 
+  const toggleCollageSelect = (docId: string) => {
+    setSelectedForCollage(prev => {
+      const next = new Set(prev)
+      if (next.has(docId)) next.delete(docId)
+      else if (next.size < 4) next.add(docId)
+      else { toast({ title: language === 'bn' ? 'কলাজে সর্বোচ্চ ৪টি ছবি' : 'Max 4 images for collage', variant: 'destructive' }); return prev }
+      return next
+    })
+  }
+
+  const clearSavedDocs = () => {
+    setScannedDocs(prev => prev.filter(d => !d.savedToVault))
+  }
+
+  const editingDocData = scannedDocs.find(d => d.id === editingDoc)
+
+  const filterLabels: Record<ScanFilter, { label: string; labelBn: string; color: string }> = {
+    original: { label: 'Original', labelBn: 'মূল', color: 'bg-emerald-600 hover:bg-emerald-700' },
+    bw: { label: 'B&W', labelBn: 'ব্ল্যাক ও হোয়াইট', color: 'bg-gray-800 hover:bg-gray-900 text-white' },
+    grayscale: { label: 'Gray', labelBn: 'গ্রেস্কেল', color: 'bg-gray-500 hover:bg-gray-600 text-white' },
+    photo: { label: 'Photo', labelBn: 'ফটো', color: 'bg-amber-500 hover:bg-amber-600 text-white' },
+    sepia: { label: 'Sepia', labelBn: 'সেপিয়া', color: 'bg-orange-700 hover:bg-orange-800 text-white' },
+  }
+
+  // ============ EDITOR VIEW ============
+  if (editingDoc && editingDocData) {
+    return (
+      <div className="p-4 pb-24 space-y-4">
+        <div className="flex items-center gap-3 mb-2">
+          <Button variant="ghost" size="sm" onClick={() => { setEditingDoc(null); setCropMode(false); setCropStart(null); setCropEnd(null) }}>
+            <ChevronLeft className="w-5 h-5 mr-1" /> {language === 'bn' ? 'ফিরে যান' : 'Back'}
+          </Button>
+          <h2 className="font-semibold">{language === 'bn' ? 'স্ক্যান সম্পাদনা' : 'Edit Scan'}</h2>
+          {editingDocData.savedToVault && (
+            <Badge className="bg-emerald-100 text-emerald-700 text-[10px]">
+              <CheckCircle className="w-3 h-3 mr-1" /> {language === 'bn' ? 'সেভ হয়েছে' : 'Saved'}
+            </Badge>
+          )}
+        </div>
+
+        {/* Canvas Editor */}
+        <div className="relative rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 border">
+          <canvas
+            ref={canvasRef}
+            className={`w-full ${cropMode ? 'cursor-crosshair' : 'cursor-default'}`}
+            style={{ maxHeight: '60vh', objectFit: 'contain' }}
+            onMouseDown={handleCropMouseDown}
+            onMouseMove={handleCropMouseMove}
+            onMouseUp={handleCropMouseUp}
+          />
+        </div>
+
+        {/* Filter & Crop Tools */}
+        <div className="space-y-3">
+          <div>
+            <p className="text-sm font-semibold mb-2">{language === 'bn' ? 'ফিল্টার' : 'Filters'}</p>
+            <div className="flex gap-2 flex-wrap">
+              {(Object.keys(filterLabels) as ScanFilter[]).map(f => (
+                <Button
+                  key={f}
+                  variant={editingDocData.filter === f ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => applyFilter(editingDoc!, f)}
+                  className={editingDocData.filter === f ? filterLabels[f].color : ''}
+                >
+                  {language === 'bn' ? filterLabels[f].labelBn : filterLabels[f].label}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <Button
+              variant={cropMode ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => { setCropMode(!cropMode); setCropStart(null); setCropEnd(null) }}
+              className={cropMode ? 'bg-emerald-600' : ''}
+            >
+              <FileEdit className="w-4 h-4 mr-1" /> {cropMode ? (language === 'bn' ? 'ক্রপ করতে টানুন' : 'Drag to Crop') : (language === 'bn' ? 'ক্রপ' : 'Crop')}
+            </Button>
+            {cropMode && cropStart && cropEnd && (
+              <Button size="sm" onClick={handleCropMouseUp} className="bg-emerald-600">
+                {language === 'bn' ? 'ক্রপ প্রয়োগ' : 'Apply Crop'}
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Save */}
+        <div className="flex gap-2">
+          <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700" onClick={() => saveSingleToVault(editingDocData)}>
+            <FolderLock className="w-4 h-4 mr-2" /> {editingDocData.savedToVault ? (language === 'bn' ? 'আপডেট করুন' : 'Update') : (language === 'bn' ? 'ভল্টে সেভ করুন' : 'Save to Vault')}
+          </Button>
+          <Button variant="outline" onClick={() => { removeDoc(editingDocData.id); setEditingDoc(null) }} className="text-red-500 hover:text-red-600">
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  // ============ COLLAGE VIEW ============
+  if (collageMode) {
+    const collagePreview = generateCollage()
+    return (
+      <div className="p-4 pb-24 space-y-4">
+        <div className="flex items-center gap-3 mb-2">
+          <Button variant="ghost" size="sm" onClick={() => { setCollageMode(false); setSelectedForCollage(new Set()) }}>
+            <ChevronLeft className="w-5 h-5 mr-1" /> {language === 'bn' ? 'ফিরে যান' : 'Back'}
+          </Button>
+          <h2 className="font-semibold">{language === 'bn' ? 'কলাজ তৈরি করুন' : 'Create Collage'}</h2>
+        </div>
+
+        <p className="text-sm text-muted-foreground">{language === 'bn' ? 'কলাজ তৈরি করতে সর্বোচ্চ ৪টি স্ক্যান নির্বাচন করুন' : 'Select up to 4 scans to combine into a collage'}</p>
+
+        {/* Layout Selection */}
+        <div className="space-y-2">
+          <p className="text-sm font-semibold">{language === 'bn' ? 'লেআউট' : 'Layout'}</p>
+          <div className="flex gap-2">
+            {(['2x1', '1x2', '2x2'] as const).map(layout => (
+              <Button
+                key={layout}
+                variant={collageLayout === layout ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setCollageLayout(layout)}
+                className={collageLayout === layout ? 'bg-emerald-600' : ''}
+              >
+                {layout}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        {/* Image Selection Grid */}
+        <div className="grid grid-cols-3 gap-2">
+          {allDocs.map(doc => (
+            <button
+              key={doc.id}
+              onClick={() => toggleCollageSelect(doc.id)}
+              className={`relative rounded-xl overflow-hidden border-2 transition-all ${
+                selectedForCollage.has(doc.id) ? 'border-emerald-500 ring-2 ring-emerald-200' : 'border-transparent opacity-70'
+              }`}
+            >
+              <img src={doc.data} alt="" className="w-full h-28 object-cover" />
+              {selectedForCollage.has(doc.id) && (
+                <div className="absolute top-1 right-1 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center">
+                  <CheckCircle className="w-3.5 h-3.5 text-white" />
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Collage Preview */}
+        {collagePreview && selectedForCollage.size > 0 && (
+          <div className="space-y-2">
+            <p className="text-sm font-semibold">{language === 'bn' ? 'প্রিভিউ' : 'Preview'}</p>
+            <div className="rounded-xl overflow-hidden border shadow-md">
+              <img src={collagePreview} alt="Collage Preview" className="w-full" />
+            </div>
+          </div>
+        )}
+
+        <Button
+          className="w-full bg-emerald-600 hover:bg-emerald-700"
+          onClick={saveCollageToVault}
+          disabled={selectedForCollage.size === 0}
+        >
+          <FolderLock className="w-4 h-4 mr-2" /> {language === 'bn' ? 'কলাজ ভল্টে সেভ করুন' : 'Save Collage to Vault'}
+        </Button>
+      </div>
+    )
+  }
+
+  // ============ MAIN SCANNER VIEW ============
   return (
     <div className="p-4 pb-24 space-y-4">
-      <Card className="border-0 shadow-md bg-gradient-to-r from-slate-600 to-slate-700 text-white">
+      <Card className="border-0 shadow-md bg-gradient-to-r from-emerald-700 to-teal-700 text-white">
         <CardContent className="p-5">
-          <div className="flex items-center gap-3">
-            <ScanLine className="w-10 h-10" />
-            <div>
-              <p className="font-bold text-lg">Doc Scanner</p>
-              <p className="text-slate-300 text-sm">Scan documents with your camera</p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <ScanLine className="w-10 h-10" />
+              <div>
+                <p className="font-bold text-lg">{language === 'bn' ? 'ডক স্ক্যানার' : 'Doc Scanner'}</p>
+                <p className="text-emerald-200 text-sm">{language === 'bn' ? 'স্ক্যান, ক্রপ, ফিল্টার ও কলাজ' : 'Scan, crop, filter & collage'}</p>
+              </div>
+            </div>
+            {/* Auto-save Toggle */}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-emerald-200">{language === 'bn' ? 'অটো সেভ' : 'Auto'}</span>
+              <Switch checked={autoSave} onCheckedChange={setAutoSave} className="scale-75" />
             </div>
           </div>
         </CardContent>
       </Card>
 
+      {/* Quick Stats */}
+      <div className="grid grid-cols-3 gap-2">
+        <Card className="border-0 shadow-sm">
+          <CardContent className="p-2.5 text-center">
+            <p className="text-lg font-bold text-blue-600">{scannedDocs.length}</p>
+            <p className="text-[10px] text-muted-foreground">{language === 'bn' ? 'নতুন স্ক্যান' : 'New Scans'}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-0 shadow-sm">
+          <CardContent className="p-2.5 text-center">
+            <p className="text-lg font-bold text-emerald-600">{savedCount}</p>
+            <p className="text-[10px] text-muted-foreground">{language === 'bn' ? 'ভল্টে সেভ' : 'In Vault'}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-0 shadow-sm">
+          <CardContent className="p-2.5 text-center">
+            <p className="text-lg font-bold text-orange-600">{unsavedDocs.length}</p>
+            <p className="text-[10px] text-muted-foreground">{language === 'bn' ? 'সেভ বাকি' : 'Unsaved'}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Scan / Upload Buttons */}
       {scanning ? (
         <div className="space-y-3">
           <div className="relative rounded-xl overflow-hidden bg-black">
@@ -1720,39 +2249,169 @@ function DocScannerPage() {
             <div className="absolute inset-0 border-4 border-white/30 rounded-xl pointer-events-none" />
           </div>
           <div className="flex gap-2">
-            <Button onClick={capture} className="flex-1 bg-red-500 hover:bg-red-600"><div className="w-4 h-4 rounded-full bg-white mr-2" /> Capture</Button>
-            <Button variant="outline" onClick={() => { setScanning(false); const stream = videoRef.current?.srcObject as MediaStream; stream?.getTracks().forEach(t => t.stop()) }}>Cancel</Button>
+            <Button onClick={capture} className="flex-1 bg-red-500 hover:bg-red-600">
+              <div className="w-4 h-4 rounded-full bg-white mr-2" /> {language === 'bn' ? 'ক্যাপচার' : 'Capture'}
+            </Button>
+            <Button variant="outline" onClick={() => {
+              setScanning(false)
+              const stream = videoRef.current?.srcObject as MediaStream
+              stream?.getTracks().forEach(t => t.stop())
+            }}>{language === 'bn' ? 'বাতিল' : 'Cancel'}</Button>
           </div>
         </div>
       ) : (
-        <Button onClick={startScan} className="w-full h-14 text-lg"><ScanLine className="w-5 h-5 mr-2" /> Start Scanning</Button>
-      )}
-
-      {scannedDocs.length > 0 && (
         <div className="space-y-3">
-          <h3 className="font-semibold">Scanned Pages ({scannedDocs.length})</h3>
-          <div className="grid grid-cols-2 gap-3">
-            {scannedDocs.map((doc, i) => (
-              <div key={i} className="relative rounded-xl overflow-hidden shadow-sm">
-                <img src={doc} alt={`Scan ${i + 1}`} className="w-full h-40 object-cover" />
-                <div className="absolute bottom-0 left-0 right-0 p-2 bg-black/50">
-                  <Button size="sm" variant="outline" onClick={() => saveToVault(doc)} className="w-full text-white border-white/50">
-                    <FolderLock className="w-3.5 h-3.5 mr-1" /> Save to Vault
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
+          <Button onClick={startScan} className="w-full h-14 text-lg bg-emerald-600 hover:bg-emerald-700">
+            <ScanLine className="w-5 h-5 mr-2" /> {language === 'bn' ? 'ক্যামেরা দিয়ে স্ক্যান' : 'Scan with Camera'}
+          </Button>
+          <label className="w-full h-14 text-lg flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 cursor-pointer hover:bg-gray-50 transition-colors text-muted-foreground font-medium">
+            <Upload className="w-5 h-5" /> {language === 'bn' ? 'ছবি আপলোড' : 'Upload Image'}
+            <input type="file" accept="image/*" multiple onChange={handleFileUpload} className="hidden" />
+          </label>
         </div>
       )}
+
+      {/* Tabs: New Scans / Vault Docs */}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'new' | 'vault')} className="w-full">
+        <TabsList className="w-full">
+          <TabsTrigger value="new" className="flex-1">
+            {language === 'bn' ? 'নতুন স্ক্যান' : 'New Scans'} {scannedDocs.length > 0 && `(${scannedDocs.length})`}
+          </TabsTrigger>
+          <TabsTrigger value="vault" className="flex-1">
+            {language === 'bn' ? 'ভল্ট ডকুমেন্ট' : 'Vault Docs'} {vaultScanDocs.length > 0 && `(${vaultScanDocs.length})`}
+          </TabsTrigger>
+        </TabsList>
+
+        {/* New Scans Tab */}
+        <TabsContent value="new" className="space-y-3 mt-3">
+          {scannedDocs.length > 0 ? (
+            <>
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold">{language === 'bn' ? 'স্ক্যান করা পেজ' : 'Scanned Pages'} ({scannedDocs.length})</h3>
+                <div className="flex gap-2">
+                  {allDocs.length >= 2 && (
+                    <Button size="sm" variant="outline" onClick={() => setCollageMode(true)}>
+                      <FileImage className="w-3.5 h-3.5 mr-1" /> {language === 'bn' ? 'কলাজ' : 'Collage'}
+                    </Button>
+                  )}
+                  {unsavedDocs.length > 0 && (
+                    <Button size="sm" onClick={saveAllToVault} className="bg-emerald-600 hover:bg-emerald-700">
+                      <FolderLock className="w-3.5 h-3.5 mr-1" /> {language === 'bn' ? 'সব সেভ' : 'Save All'}
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                {scannedDocs.map((doc) => (
+                  <div key={doc.id} className="relative rounded-xl overflow-hidden shadow-sm border bg-white">
+                    <img src={doc.data} alt={`Scan`} className="w-full h-40 object-cover" />
+                    {/* Filter Badge */}
+                    <div className="absolute top-2 left-2 flex gap-1">
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-white/90">
+                        {language === 'bn' ? filterLabels[doc.filter].labelBn : filterLabels[doc.filter].label}
+                      </Badge>
+                      {doc.savedToVault && (
+                        <Badge className="text-[10px] px-1.5 py-0 bg-emerald-500 text-white">
+                          <CheckCircle className="w-2.5 h-2.5 mr-0.5" /> {language === 'bn' ? 'সেভ' : 'Saved'}
+                        </Badge>
+                      )}
+                    </div>
+                    {/* Unsaved indicator */}
+                    {!doc.savedToVault && (
+                      <div className="absolute top-2 right-2">
+                        <div className="w-2.5 h-2.5 rounded-full bg-orange-400 animate-pulse" title="Unsaved" />
+                      </div>
+                    )}
+                    {/* Actions Overlay */}
+                    <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/70 to-transparent">
+                      <div className="flex gap-1.5">
+                        <Button size="sm" variant="outline" onClick={() => setEditingDoc(doc.id)} className="flex-1 text-white border-white/40 bg-white/10 text-xs h-7">
+                          <Pencil className="w-3 h-3 mr-1" /> {language === 'bn' ? 'সম্পাদনা' : 'Edit'}
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => saveSingleToVault(doc)} className="flex-1 text-white border-white/40 bg-white/10 text-xs h-7">
+                          <FolderLock className="w-3 h-3 mr-1" /> {doc.savedToVault ? (language === 'bn' ? 'আপডেট' : 'Update') : (language === 'bn' ? 'সেভ' : 'Save')}
+                        </Button>
+                        <button onClick={() => removeDoc(doc.id)} className="p-1.5 text-red-300 hover:text-red-100">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Clear Saved */}
+              {savedCount > 0 && (
+                <Button variant="ghost" size="sm" onClick={clearSavedDocs} className="text-muted-foreground w-full">
+                  {language === 'bn' ? 'সেভ করা ডকুমেন্ট মুছুন (ভল্ট থেকে নয়)' : 'Clear saved docs from view (not from vault)'}
+                </Button>
+              )}
+            </>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <ScanLine className="w-12 h-12 mx-auto mb-2 opacity-20" />
+              <p className="font-medium">{language === 'bn' ? 'এখনও কোনো স্ক্যান নেই' : 'No new scans yet'}</p>
+              <p className="text-sm mt-1">{language === 'bn' ? 'ক্যামেরা বা আপলোড দিয়ে স্ক্যান শুরু করুন' : 'Use camera or upload images to start scanning'}</p>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Vault Docs Tab */}
+        <TabsContent value="vault" className="space-y-3 mt-3">
+          {vaultScanDocs.length > 0 ? (
+            <>
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold">{language === 'bn' ? 'ভল্ট থেকে ডকুমেন্ট' : 'Docs from Vault'} ({vaultScanDocs.length})</h3>
+                <Button size="sm" variant="outline" onClick={() => setCollageMode(true)}>
+                  <FileImage className="w-3.5 h-3.5 mr-1" /> {language === 'bn' ? 'কলাজ' : 'Collage'}
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {vaultScanDocs.map((doc) => (
+                  <div key={doc.id} className="relative rounded-xl overflow-hidden shadow-sm border bg-white">
+                    <img src={doc.data} alt={doc.name || 'Doc'} className="w-full h-40 object-cover" />
+                    {/* Vault Badge */}
+                    <div className="absolute top-2 left-2 flex gap-1">
+                      <Badge className="text-[10px] px-1.5 py-0 bg-emerald-500 text-white">
+                        <FolderLock className="w-2.5 h-2.5 mr-0.5" /> {language === 'bn' ? 'ভল্ট' : 'Vault'}
+                      </Badge>
+                      {doc.category === 'collage' && (
+                        <Badge className="text-[10px] px-1.5 py-0 bg-purple-500 text-white">
+                          <FileImage className="w-2.5 h-2.5 mr-0.5" /> {language === 'bn' ? 'কলাজ' : 'Collage'}
+                        </Badge>
+                      )}
+                    </div>
+                    {/* Doc Name */}
+                    <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/70 to-transparent">
+                      <p className="text-white text-xs truncate mb-1">{doc.name || 'Document'}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <FolderLock className="w-12 h-12 mx-auto mb-2 opacity-20" />
+              <p className="font-medium">{language === 'bn' ? 'ভল্টে কোনো স্ক্যান ডকুমেন্ট নেই' : 'No scanned docs in vault yet'}</p>
+              <p className="text-sm mt-1">{language === 'bn' ? 'স্ক্যান করে ভল্টে সেভ করুন' : 'Scan and save documents to vault'}</p>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
 
 // ============ DOCVAULT ============
 function DocVaultPage() {
-  const { documents, setDocuments } = useAppStore()
+  const { documents, setDocuments, setPage, language } = useAppStore()
+  const t = translations[language]
   const [showUpload, setShowUpload] = useState(false)
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  const [filterCategory, setFilterCategory] = useState<string>('all')
+  const [previewDoc, setPreviewDoc] = useState<Document | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
 
   const load = async () => {
     try { const d = await apiFetch('/documents'); setDocuments(d.documents) } catch { /* */ }
@@ -1760,31 +2419,113 @@ function DocVaultPage() {
   useEffect(() => { load() }, [])
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = async () => {
-      try {
-        await apiFetch('/documents', {
-          method: 'POST',
-          body: JSON.stringify({ name: file.name, type: file.type, size: file.size, data: reader.result, category: 'general' })
-        })
-        toast({ title: 'Document uploaded!' })
-        load()
-      } catch { /* */ }
-    }
-    reader.readAsDataURL(file)
+    const files = e.target.files
+    if (!files) return
+    Array.from(files).forEach(file => {
+      const reader = new FileReader()
+      reader.onload = async () => {
+        try {
+          await apiFetch('/documents', {
+            method: 'POST',
+            body: JSON.stringify({ name: file.name, type: file.type, size: file.size, data: reader.result, category: 'general' })
+          })
+          toast({ title: language === 'bn' ? 'ডকুমেন্ট আপলোড হয়েছে!' : 'Document uploaded!', description: file.name })
+          load()
+        } catch { /* */ }
+      }
+      reader.readAsDataURL(file)
+    })
+    e.target.value = ''
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this document?')) return
-    try { await apiFetch(`/documents?id=${id}`, { method: 'DELETE' }); load() } catch { /* */ }
+    if (!confirm(language === 'bn' ? 'এই ডকুমেন্টটি মুছবেন?' : 'Delete this document?')) return
+    try { await apiFetch(`/documents?id=${id}`, { method: 'DELETE' }); toast({ title: language === 'bn' ? 'ডকুমেন্ট মুছে ফেলা হয়েছে' : 'Document deleted' }); load() } catch { /* */ }
   }
 
   const getFileIcon = (type: string) => {
     if (type.includes('image')) return <FileImage className="w-6 h-6 text-blue-500" />
     if (type.includes('pdf')) return <FileType className="w-6 h-6 text-red-500" />
     return <FileText className="w-6 h-6 text-gray-500" />
+  }
+
+  const getCategoryIcon = (category: string) => {
+    switch (category) {
+      case 'scanned': return <ScanLine className="w-3.5 h-3.5" />
+      case 'collage': return <FileImage className="w-3.5 h-3.5" />
+      default: return <FolderLock className="w-3.5 h-3.5" />
+    }
+  }
+
+  const filteredDocs = (documents as Document[]).filter(doc => {
+    const matchCategory = filterCategory === 'all' || doc.category === filterCategory
+    const matchSearch = !searchQuery || doc.name.toLowerCase().includes(searchQuery.toLowerCase())
+    return matchCategory && matchSearch
+  })
+
+  const categories = ['all', 'scanned', 'collage', 'general']
+  const scannedCount = (documents as Document[]).filter(d => d.category === 'scanned').length
+  const collageCount = (documents as Document[]).filter(d => d.category === 'collage').length
+
+  // Preview Modal
+  if (previewDoc) {
+    return (
+      <div className="p-4 pb-24 space-y-4">
+        <div className="flex items-center gap-3 mb-2">
+          <Button variant="ghost" size="sm" onClick={() => setPreviewDoc(null)}>
+            <ChevronLeft className="w-5 h-5 mr-1" /> {language === 'bn' ? 'ফিরে যান' : 'Back'}
+          </Button>
+          <h2 className="font-semibold truncate">{previewDoc.name}</h2>
+        </div>
+
+        {previewDoc.type.includes('image') && previewDoc.data ? (
+          <div className="rounded-xl overflow-hidden border shadow-md bg-white">
+            <img src={previewDoc.data} alt={previewDoc.name} className="w-full" style={{ maxHeight: '70vh', objectFit: 'contain' }} />
+          </div>
+        ) : (
+          <div className="text-center py-16 text-muted-foreground">
+            <FileText className="w-16 h-16 mx-auto mb-3 opacity-20" />
+            <p>Preview not available for this file type</p>
+          </div>
+        )}
+
+        <div className="space-y-3">
+          <Card className="border-0 shadow-md">
+            <CardContent className="p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Name</span>
+                <span className="text-sm font-medium truncate max-w-[200px]">{previewDoc.name}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Type</span>
+                <Badge variant="secondary">{previewDoc.type}</Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Category</span>
+                <Badge variant="outline" className="capitalize">{previewDoc.category}</Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Size</span>
+                <span className="text-sm">{previewDoc.size > 1024 ? `${(previewDoc.size / 1024).toFixed(1)} KB` : `${previewDoc.size} B`}</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="flex gap-2">
+            {previewDoc.data && (
+              <a href={previewDoc.data} download={previewDoc.name} className="flex-1">
+                <Button className="w-full bg-emerald-600 hover:bg-emerald-700">
+                  <Download className="w-4 h-4 mr-2" /> Download
+                </Button>
+              </a>
+            )}
+            <Button variant="destructive" onClick={() => { handleDelete(previewDoc.id); setPreviewDoc(null) }}>
+              <Trash2 className="w-4 h-4 mr-2" /> Delete
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -1794,52 +2535,168 @@ function DocVaultPage() {
           <div className="flex items-center gap-3">
             <FolderLock className="w-10 h-10" />
             <div>
-              <p className="font-bold text-lg">DocVault</p>
-              <p className="text-slate-300 text-sm">{(documents as Document[]).length} documents secured</p>
+              <p className="font-bold text-lg">{language === 'bn' ? 'ডকভল্ট' : 'DocVault'}</p>
+              <p className="text-slate-300 text-sm">{(documents as Document[]).length} {language === 'bn' ? 'টি ডকুমেন্ট সুরক্ষিত' : 'documents secured'}</p>
             </div>
           </div>
         </CardContent>
       </Card>
 
+      {/* Quick Stats */}
+      <div className="grid grid-cols-3 gap-2">
+        <Card className="border-0 shadow-sm cursor-pointer hover:shadow-md transition-shadow" onClick={() => setFilterCategory('scanned')}>
+          <CardContent className="p-3 text-center">
+            <ScanLine className="w-5 h-5 mx-auto text-blue-500 mb-1" />
+            <p className="text-lg font-bold">{scannedCount}</p>
+            <p className="text-[10px] text-muted-foreground">{language === 'bn' ? 'স্ক্যান করা' : 'Scanned'}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-0 shadow-sm cursor-pointer hover:shadow-md transition-shadow" onClick={() => setFilterCategory('collage')}>
+          <CardContent className="p-3 text-center">
+            <FileImage className="w-5 h-5 mx-auto text-purple-500 mb-1" />
+            <p className="text-lg font-bold">{collageCount}</p>
+            <p className="text-[10px] text-muted-foreground">{language === 'bn' ? 'কলাজ' : 'Collages'}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-0 shadow-sm cursor-pointer hover:shadow-md transition-shadow" onClick={() => setFilterCategory('general')}>
+          <CardContent className="p-3 text-center">
+            <Upload className="w-5 h-5 mx-auto text-green-500 mb-1" />
+            <p className="text-lg font-bold">{(documents as Document[]).filter(d => d.category === 'general').length}</p>
+            <p className="text-[10px] text-muted-foreground">{language === 'bn' ? 'আপলোড' : 'Uploaded'}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Search & Actions */}
       <div className="flex gap-2">
-        <Button className="flex-1" onClick={() => setShowUpload(!showUpload)}><Upload className="w-4 h-4 mr-2" /> Upload</Button>
+        <div className="flex-1 relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder={language === 'bn' ? 'ডকুমেন্ট খুঁজুন...' : 'Search documents...'}
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <Button size="icon" variant="outline" onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}>
+          {viewMode === 'grid' ? <List className="w-4 h-4" /> : <Grid3X3 className="w-4 h-4" />}
+        </Button>
+      </div>
+
+      {/* Category Filter */}
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {categories.map(cat => (
+          <Button
+            key={cat}
+            variant={filterCategory === cat ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setFilterCategory(cat)}
+            className={filterCategory === cat ? 'bg-emerald-600 hover:bg-emerald-700 whitespace-nowrap' : 'whitespace-nowrap'}
+          >
+            {getCategoryIcon(cat === 'all' ? 'general' : cat)}
+            <span className="ml-1 capitalize">{cat}</span>
+          </Button>
+        ))}
+      </div>
+
+      {/* Upload */}
+      <div className="flex gap-2">
+        <Button className="flex-1" onClick={() => setShowUpload(!showUpload)}>
+          <Upload className="w-4 h-4 mr-2" /> {language === 'bn' ? 'আপলোড' : 'Upload'}
+        </Button>
+        <Button variant="outline" onClick={() => setPage('docscanner')}>
+          <ScanLine className="w-4 h-4 mr-2" /> {language === 'bn' ? 'স্ক্যান' : 'Scan'}
+        </Button>
       </div>
 
       {showUpload && (
         <Card className="border-0 shadow-md">
           <CardContent className="p-4">
-            <Input type="file" onChange={handleUpload} accept="image/*,.pdf,.doc,.docx,.txt" />
+            <Input type="file" onChange={handleUpload} accept="image/*,.pdf,.doc,.docx,.txt" multiple />
             <p className="text-xs text-muted-foreground mt-2">Supports images, PDFs, and documents</p>
           </CardContent>
         </Card>
       )}
 
-      <div className="space-y-2">
-        {(documents as Document[]).map(doc => (
-          <div key={doc.id} className="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 rounded-xl shadow-sm">
-            <div className="w-12 h-12 bg-muted rounded-xl flex items-center justify-center">
-              {getFileIcon(doc.type)}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{doc.name}</p>
-              <p className="text-xs text-muted-foreground">{doc.type} · {doc.size > 1024 ? `${(doc.size / 1024).toFixed(1)} KB` : `${doc.size} B`}</p>
-            </div>
-            <div className="flex gap-1">
-              {doc.data && (
-                <a href={doc.data} download={doc.name} className="p-1.5 hover:bg-muted rounded-lg"><Download className="w-3.5 h-3.5" /></a>
-              )}
-              <button onClick={() => handleDelete(doc.id)} className="p-1.5 hover:bg-red-50 rounded-lg text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
-            </div>
+      {/* Documents Grid/List */}
+      {filteredDocs.length > 0 ? (
+        viewMode === 'grid' ? (
+          <div className="grid grid-cols-2 gap-3">
+            {filteredDocs.map(doc => (
+              <div
+                key={doc.id}
+                className="relative rounded-xl overflow-hidden shadow-sm border bg-white cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => setPreviewDoc(doc)}
+              >
+                {doc.type.includes('image') && doc.data ? (
+                  <img src={doc.data} alt={doc.name} className="w-full h-36 object-cover" />
+                ) : (
+                  <div className="w-full h-36 bg-muted flex items-center justify-center">
+                    {getFileIcon(doc.type)}
+                  </div>
+                )}
+                <div className="p-2">
+                  <p className="text-xs font-medium truncate">{doc.name}</p>
+                  <div className="flex items-center justify-between mt-1">
+                    <Badge variant="secondary" className="text-[9px] px-1 capitalize">{doc.category}</Badge>
+                    <div className="flex gap-1">
+                      {doc.data && (
+                        <a href={doc.data} download={doc.name} onClick={e => e.stopPropagation()} className="p-1 hover:bg-muted rounded">
+                          <Download className="w-3 h-3" />
+                        </a>
+                      )}
+                      <button onClick={e => { e.stopPropagation(); handleDelete(doc.id) }} className="p-1 hover:bg-red-50 rounded text-red-500">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
-        {(documents as Document[]).length === 0 && (
-          <div className="text-center py-12 text-muted-foreground">
-            <FolderLock className="w-12 h-12 mx-auto mb-2 opacity-30" />
-            <p>No documents yet</p>
-            <p className="text-sm">Upload or scan documents to store them securely</p>
+        ) : (
+          <div className="space-y-2">
+            {filteredDocs.map(doc => (
+              <div
+                key={doc.id}
+                className="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 rounded-xl shadow-sm cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => setPreviewDoc(doc)}
+              >
+                <div className="w-12 h-12 bg-muted rounded-xl flex items-center justify-center overflow-hidden flex-shrink-0">
+                  {doc.type.includes('image') && doc.data ? (
+                    <img src={doc.data} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    getFileIcon(doc.type)
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{doc.name}</p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <Badge variant="secondary" className="text-[9px] px-1 capitalize">{doc.category}</Badge>
+                    <span className="text-xs text-muted-foreground">{doc.type.split('/')[1] || doc.type}</span>
+                  </div>
+                </div>
+                <div className="flex gap-1">
+                  {doc.data && (
+                    <a href={doc.data} download={doc.name} onClick={e => e.stopPropagation()} className="p-1.5 hover:bg-muted rounded-lg">
+                      <Download className="w-3.5 h-3.5" />
+                    </a>
+                  )}
+                  <button onClick={e => { e.stopPropagation(); handleDelete(doc.id) }} className="p-1.5 hover:bg-red-50 rounded-lg text-red-500">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
-        )}
-      </div>
+        )
+      ) : (
+        <div className="text-center py-12 text-muted-foreground">
+          <FolderLock className="w-12 h-12 mx-auto mb-2 opacity-30" />
+          <p>No documents found</p>
+          <p className="text-sm">{searchQuery || filterCategory !== 'all' ? 'Try changing filters' : 'Upload or scan documents to store them securely'}</p>
+        </div>
+      )}
     </div>
   )
 }

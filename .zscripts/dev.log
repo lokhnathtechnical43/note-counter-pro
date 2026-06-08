@@ -749,3 +749,37 @@ Validation Error Count: 1
  POST /api/auth 500 in 143ms (compile: 3ms, render: 140ms)
 error: script "dev" was terminated by signal SIGTERM (Polite quit request)
 [?25h
+==========================================
+[2026-06-08 14:03:14] Starting: bun install
+==========================================
+[BUN] Installing dependencies...
+[0.03ms] ".env"
+bun install v1.3.14 (0d9b296a)
+
+Checked 857 installs across 935 packages (no changes) [21.00ms]
+==========================================
+[2026-06-08 14:03:14] Completed: bun install
+[LOG] Step: bun install | Duration: 0s
+==========================================
+
+==========================================
+[2026-06-08 14:03:14] Starting: bun run db:push
+==========================================
+[BUN] Setting up database...
+$ prisma db push
+Environment variables loaded from .env
+Prisma schema loaded from prisma/schema.prisma
+Error: Prisma schema validation - (get-config wasm)
+Error code: P1012
+error: Error validating datasource `db`: the URL must start with the protocol `postgresql://` or `postgres://`.
+  -->  prisma/schema.prisma:7
+   | 
+ 6 |   provider = "postgresql"
+ 7 |   url      = env("DATABASE_URL")
+   | 
+
+Validation Error Count: 1
+[Context: getConfig]
+
+Prisma CLI Version : 6.19.2
+error: script "db:push" exited with code 1
