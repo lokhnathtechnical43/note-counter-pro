@@ -1,4 +1,11 @@
 node_modules/
 .next/
+.env
 .env.local
 db/
+dev.log
+.zscripts/
+download/
+mini-services/
+examples/
+*.db
