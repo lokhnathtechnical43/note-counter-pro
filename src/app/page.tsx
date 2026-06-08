@@ -1810,14 +1810,22 @@ const NoteCounterPage = memo(function NoteCounterPage() {
   }
 
   return (
-    <div className="pb-28 bg-gray-50 dark:bg-gray-950 min-h-screen">
+    <div className="pb-44 bg-gray-50 dark:bg-gray-950 min-h-screen">
       {/* ===== HEADER - Light/dark theme ===== */}
       <div className="bg-white dark:bg-gray-900 sticky top-0 z-30">
         <div className="px-4 py-3 flex items-center justify-between">
           <h1 className="font-bold text-lg">{language === 'bn' ? 'নোট কাউন্টার' : 'Note Counter'}</h1>
-          <button onClick={resetAll} className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-red-500 transition-colors" title={language === 'bn' ? 'রিসেট' : 'Reset'}>
-            <RefreshCw className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setShowCalc(!showCalc)} className="p-1.5 hover:bg-muted rounded-lg text-emerald-600 dark:text-emerald-400 transition-colors" title={language === 'bn' ? 'ক্যালকুলেটর' : 'Calculator'}>
+              <Calculator className="w-5 h-5" />
+            </button>
+            <button onClick={handleShare} className="p-1.5 hover:bg-muted rounded-lg text-blue-600 dark:text-blue-400 transition-colors" title={language === 'bn' ? 'শেয়ার' : 'Share'}>
+              <Share2 className="w-5 h-5" />
+            </button>
+            <button onClick={resetAll} className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-red-500 transition-colors" title={language === 'bn' ? 'রিসেট' : 'Reset'}>
+              <RefreshCw className="w-5 h-5" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -2002,31 +2010,97 @@ const NoteCounterPage = memo(function NoteCounterPage() {
         </div>
       </div>
 
-      {/* ===== GRAND TOTAL ===== */}
-      <div className="px-3 pt-2">
-        <div className="bg-gradient-to-r from-amber-600 to-yellow-500 rounded-lg p-3 flex items-center justify-between">
-          <div>
-            <p className="text-amber-100 text-xs">{language === 'bn' ? 'গ্র্যান্ড টোটাল' : 'GRAND TOTAL'}</p>
-            <p className="text-white text-2xl font-bold">{formatCurrency(total)}</p>
-          </div>
-          <div className="text-right">
-            <p className="text-amber-100 text-xs">{language === 'bn' ? 'মোট নোট টাকা' : 'Total Cash'}</p>
-            <p className="text-white/80 text-xs">{formatCurrency(total)}</p>
+      {/* ===== CALCULATOR ===== */}
+      {showCalc && (
+        <div className="px-3 pt-3">
+          <div className="rounded-xl overflow-hidden border border-gray-800">
+            <div className="flex items-center justify-between p-3 bg-gray-900">
+              <div className="flex items-center gap-2">
+                <Calculator className="w-4 h-4 text-emerald-400" />
+                <span className="text-gray-300 text-sm font-medium">{language === 'bn' ? 'ক্যালকুলেটর' : 'Calculator'}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowCalcHistory(!showCalcHistory)} className={`text-gray-400 hover:text-white p-1 transition-colors ${showCalcHistory ? 'text-emerald-400' : ''}`}><History className="w-4 h-4" /></button>
+                <button onClick={() => setShowCalc(false)} className="text-gray-400 hover:text-white p-1"><X className="w-4 h-4" /></button>
+              </div>
+            </div>
+            {showCalcHistory && (
+              <div className="bg-gray-800 border-t border-gray-700 max-h-48 overflow-y-auto">
+                <div className="flex items-center justify-between p-2 px-3 sticky top-0 bg-gray-800 z-10">
+                  <span className="text-gray-400 text-xs font-medium">{language === 'bn' ? 'ইতিহাস' : 'History'} ({calcHistory.length})</span>
+                  {calcHistory.length > 0 && <button onClick={clearCalcHistory} className="text-red-400 hover:text-red-300 text-xs">{language === 'bn' ? 'মুছুন' : 'Clear'}</button>}
+                </div>
+                {calcHistory.length === 0 ? (
+                  <p className="text-gray-500 text-xs text-center py-4">{language === 'bn' ? 'এখনও কোনো ক্যালকুলেশন নেই' : 'No calculations yet'}</p>
+                ) : (
+                  <div className="space-y-1 px-2 pb-2">
+                    {calcHistory.map(entry => (
+                      <button key={entry.id} onClick={() => applyHistoryResult(entry.result)} className="w-full text-right p-2 rounded-lg hover:bg-gray-700 transition-colors group">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1">{entry.fromNoteCount && <span className="text-[10px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full">{language === 'bn' ? 'নোট' : 'Note'}</span>}</div>
+                          <p className="text-gray-500 text-[10px]">{entry.date}</p>
+                        </div>
+                        <p className="text-gray-400 text-xs">{entry.expression}</p>
+                        <p className="text-emerald-400 text-sm font-medium group-hover:text-emerald-300">= {formatCurrency(parseFloat(entry.result))}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="bg-gray-900 p-4 pt-3">
+              <div className="text-right mb-4 p-3 bg-gray-800 rounded-xl">
+                {calcExpression && <p className="text-gray-400 text-sm h-5 truncate">{calcExpression}</p>}
+                {!calcExpression && calcOperation && calcPrevious && <p className="text-gray-400 text-sm h-5 truncate">{formatCurrency(parseFloat(calcPrevious))} {calcOperation}</p>}
+                <p className="text-white text-3xl font-light truncate">{calcDisplay.includes('.') ? calcDisplay : formatCurrency(parseFloat(calcDisplay))}</p>
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                {calcButtons.map((row, ri) => (
+                  row.map((btn, ci) => {
+                    const isOp = ['+', '-', '×', '÷', '='].includes(btn)
+                    const isFunc = ['C', '⌫', '%'].includes(btn)
+                    const isActiveOp = calcOperation === btn && calcReset
+                    return (
+                      <button key={`${ri}-${ci}`} onClick={() => calcHandleButton(btn)}
+                        className={`h-12 rounded-xl text-lg font-medium transition-all active:scale-95 ${btn === '0' ? 'col-span-2' : ''} ${isOp ? (isActiveOp ? 'bg-emerald-300 text-gray-900' : 'bg-emerald-500 text-white hover:bg-emerald-600') : isFunc ? 'bg-gray-600 text-white hover:bg-gray-500' : 'bg-gray-700 text-white hover:bg-gray-600'}`}>
+                        {btn}
+                      </button>
+                    )
+                  })
+                ))}
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* ===== ACTION BUTTONS ===== */}
-      <div className="px-3 pt-3 grid grid-cols-3 gap-2">
-        <button onClick={() => handleSave('in')} className="bg-[#2e7d32] hover:bg-[#388e3c] text-white py-3 rounded-lg font-bold text-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-lg">
-          <Download className="w-4 h-4" /> {language === 'bn' ? 'সেভ ইন' : 'Save In'}
-        </button>
-        <button onClick={() => setShowSaved(!showSaved)} className="bg-[#6d4c41] hover:bg-[#795548] text-white py-3 rounded-lg font-bold text-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-lg">
-          <Eye className="w-4 h-4" /> {language === 'bn' ? 'এন্ট্রি দেখুন' : 'View Entry'}
-        </button>
-        <button onClick={() => handleSave('out')} className="bg-[#c62828] hover:bg-[#d32f2f] text-white py-3 rounded-lg font-bold text-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-lg">
-          <Upload className="w-4 h-4" /> {language === 'bn' ? 'সেভ আউট' : 'Save Out'}
-        </button>
+      {/* ===== STICKY BOTTOM: GRAND TOTAL + ACTION BUTTONS ===== */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-gray-900 border-t border-border/50 shadow-[0_-4px_20px_rgba(0,0,0,0.1)]">
+        {/* Grand Total */}
+        <div className="px-3 pt-2 pb-1">
+          <div className="bg-gradient-to-r from-amber-600 to-yellow-500 rounded-lg p-2.5 flex items-center justify-between">
+            <div>
+              <p className="text-amber-100 text-[10px]">{language === 'bn' ? 'গ্র্যান্ড টোটাল' : 'GRAND TOTAL'}</p>
+              <p className="text-white text-xl font-bold">{formatCurrency(total)}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-amber-100 text-[10px]">{language === 'bn' ? 'মোট নোট টাকা' : 'Total Cash'}</p>
+              <p className="text-white/80 text-xs">{formatCurrency(total)}</p>
+            </div>
+          </div>
+        </div>
+        {/* Action Buttons */}
+        <div className="px-3 pb-2 grid grid-cols-3 gap-2">
+          <button onClick={() => handleSave('in')} className="bg-[#2e7d32] hover:bg-[#388e3c] text-white py-2.5 rounded-lg font-bold text-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-lg">
+            <Download className="w-4 h-4" /> {language === 'bn' ? 'সেভ ইন' : 'Save In'}
+          </button>
+          <button onClick={() => setShowSaved(!showSaved)} className="bg-[#6d4c41] hover:bg-[#795548] text-white py-2.5 rounded-lg font-bold text-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-lg">
+            <Eye className="w-4 h-4" /> {language === 'bn' ? 'এন্ট্রি দেখুন' : 'View Entry'}
+          </button>
+          <button onClick={() => handleSave('out')} className="bg-[#c62828] hover:bg-[#d32f2f] text-white py-2.5 rounded-lg font-bold text-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-lg">
+            <Upload className="w-4 h-4" /> {language === 'bn' ? 'সেভ আউট' : 'Save Out'}
+          </button>
+        </div>
       </div>
 
       {/* ===== SAVED ENTRIES ===== */}
