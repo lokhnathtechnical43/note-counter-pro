@@ -121,12 +121,8 @@
     overscroll-behavior: none;
     -webkit-overflow-scrolling: touch;
   }
-  /* Disable pull-to-refresh on mobile */
+  /* Disable pull-to-refresh on mobile but keep normal scrolling */
   body {
     overscroll-behavior-y: contain;
-    overflow-y: auto;
-    position: fixed;
-    width: 100%;
-    height: 100%;
   }
 }
