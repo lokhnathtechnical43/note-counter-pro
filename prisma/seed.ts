@@ -1,27 +1,26 @@
 import { PrismaClient } from '@prisma/client'
+import bcrypt from 'bcryptjs'
 
 async function main() {
   const prisma = new PrismaClient()
   
-  // Hash password using same method as auth route
-  const encoder = new TextEncoder()
-  const data = encoder.encode('admin123')
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  const password = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+  const hashedPassword = await bcrypt.hash('admin123', 12)
   
   const admin = await prisma.user.upsert({
     where: { email: 'admin@dailylife.com' },
-    update: {},
+    update: { password: hashedPassword },
     create: {
       email: 'admin@dailylife.com',
       name: 'Admin',
-      password,
+      password: hashedPassword,
       role: 'admin'
     }
   })
   
-  console.log('Admin user created:', admin.email)
+  console.log('✅ Admin user created/updated:', admin.email)
+  console.log('   Password: admin123')
+  console.log('   Role:', admin.role)
+  
   await prisma.$disconnect()
 }
 

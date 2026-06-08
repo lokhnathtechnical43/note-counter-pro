@@ -1,19 +1,6 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
-
-// Simple hash function for passwords
-async function hashPassword(password: string): Promise<string> {
-  const encoder = new TextEncoder()
-  const data = encoder.encode(password)
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
-}
-
-async function verifyPassword(password: string, hash: string): Promise<boolean> {
-  const passwordHash = await hashPassword(password)
-  return passwordHash === hash
-}
+import bcrypt from 'bcryptjs'
 
 // POST - Login
 export async function POST(req: NextRequest) {
@@ -26,12 +13,16 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'All fields are required' }, { status: 400 })
       }
 
+      if (password.length < 6) {
+        return NextResponse.json({ error: 'Password must be at least 6 characters' }, { status: 400 })
+      }
+
       const existing = await db.user.findUnique({ where: { email } })
       if (existing) {
         return NextResponse.json({ error: 'Email already exists' }, { status: 400 })
       }
 
-      const hashedPassword = await hashPassword(password)
+      const hashedPassword = await bcrypt.hash(password, 12)
       const user = await db.user.create({
         data: { email, name, password: hashedPassword }
       })
@@ -50,7 +41,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
       }
 
-      const valid = await verifyPassword(password, user.password)
+      const valid = await bcrypt.compare(password, user.password)
       if (!valid) {
         return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
       }
@@ -126,11 +117,14 @@ export async function PUT(req: NextRequest) {
       if (!oldPassword || !newPassword) {
         return NextResponse.json({ error: 'Old and new password required' }, { status: 400 })
       }
-      const valid = await verifyPassword(oldPassword, user.password)
+      const valid = await bcrypt.compare(oldPassword, user.password)
       if (!valid) {
         return NextResponse.json({ error: 'Invalid old password' }, { status: 401 })
       }
-      const hashedPassword = await hashPassword(newPassword)
+      if (newPassword.length < 6) {
+        return NextResponse.json({ error: 'New password must be at least 6 characters' }, { status: 400 })
+      }
+      const hashedPassword = await bcrypt.hash(newPassword, 12)
       await db.user.update({
         where: { id: token },
         data: { password: hashedPassword }
