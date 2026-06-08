@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { Lang } from './i18n'
 
 export type Page = 
   | 'login' | 'register' | 'forgot'
@@ -41,6 +42,7 @@ interface AppState {
   // UI
   sidebarOpen: boolean
   isLoading: boolean
+  language: Lang
   
   // Actions
   setAuth: (user: User, token: string) => void
@@ -58,6 +60,7 @@ interface AppState {
   setAlarms: (data: unknown[]) => void
   toggleSidebar: () => void
   setLoading: (loading: boolean) => void
+  setLanguage: (lang: Lang) => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -77,6 +80,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   alarms: [],
   sidebarOpen: false,
   isLoading: false,
+  language: (typeof window !== 'undefined' && localStorage.getItem('lang') === 'bn') ? 'bn' : 'en',
 
   setAuth: (user, token) => {
     if (typeof window !== 'undefined') {
@@ -116,4 +120,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setAlarms: (data) => set({ alarms: data }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   setLoading: (loading) => set({ isLoading: loading }),
+  setLanguage: (lang) => {
+    if (typeof window !== 'undefined') localStorage.setItem('lang', lang)
+    set({ language: lang })
+  },
 }))

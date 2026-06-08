@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useAppStore, Page } from '@/lib/store'
 import apiFetch from '@/lib/api'
+import { translations, TranslationKey, Lang } from '@/lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -278,20 +279,56 @@ function ForgotPasswordPage() {
 
 // ============ HEADER ============
 function AppHeader() {
-  const { currentPage, setPage, toggleSidebar, user, logout } = useAppStore()
+  const { currentPage, setPage, toggleSidebar, user, logout, language, setLanguage } = useAppStore()
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [notifications, setNotifications] = useState<Array<{ id: string; title: string; message: string; read: boolean; createdAt: string }>>([])
+  const [unreadCount, setUnreadCount] = useState(0)
+  const { token } = useAppStore()
+
+  const t = (key: TranslationKey): string => translations[language][key] || translations['en'][key] || key
 
   const getTitle = () => {
     const titles: Record<string, string> = {
-      dashboard: 'Dashboard', expenses: 'Expenses', receivables: 'Receivables',
-      payables: 'Payables', loans: 'Loan / EMI', accounts: 'Accounts',
-      plans: "Tomorrow's Plan", notes: 'Notes', notecounter: 'Note Counter',
-      docscanner: 'Doc Scanner', docvault: 'DocVault', calculator: 'Calculator',
-      calendar: 'Calendar', alarm: 'Alarm', tools: 'Tools',
-      profile: 'Profile', admin: 'Admin Panel', 'admin-users': 'Manage Users',
+      dashboard: t('dashboard'), expenses: t('expenses'), receivables: t('receivables'),
+      payables: t('payables'), loans: t('loanEmi'), accounts: t('accounts'),
+      plans: t('tomorrowPlan'), notes: t('notes'), notecounter: t('noteCounter'),
+      docscanner: t('docScanner'), docvault: t('docVault'), calculator: t('calculator'),
+      calendar: t('calendar'), alarm: t('alarm'), tools: t('tools'),
+      profile: t('profile'), admin: t('adminPanel'), 'admin-users': t('manageUsers'),
       'admin-stats': 'Statistics'
     }
     return titles[currentPage] || 'DailyLife Pro'
+  }
+
+  // Fetch notifications
+  const fetchNotifications = async () => {
+    if (!token) return
+    try {
+      const data = await apiFetch('/notifications', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      setNotifications(data.notifications || [])
+      setUnreadCount(data.unreadCount || 0)
+    } catch {}
+  }
+
+  useEffect(() => {
+    fetchNotifications()
+    const interval = setInterval(fetchNotifications, 30000)
+    return () => clearInterval(interval)
+  }, [token])
+
+  const markAllRead = async () => {
+    try {
+      await apiFetch('/notifications', {
+        method: 'PUT',
+        body: JSON.stringify({ markAllRead: true }),
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+      setUnreadCount(0)
+    } catch {}
   }
 
   return (
@@ -310,11 +347,52 @@ function AppHeader() {
           <h1 className="font-semibold text-lg">{getTitle()}</h1>
         </div>
         <div className="flex items-center gap-2">
+          {/* Language Toggle */}
+          <button onClick={() => setLanguage(language === 'bn' ? 'en' : 'bn')} className="px-2 py-1 text-xs font-medium bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200 transition-colors">
+            {language === 'bn' ? 'EN' : 'বাং'}
+          </button>
           {user?.role === 'admin' && (
             <button onClick={() => setPage('admin')} className="p-1.5 hover:bg-muted rounded-lg">
               <Shield className="w-5 h-5 text-emerald-600" />
             </button>
           )}
+          {/* Notification Bell */}
+          <div className="relative">
+            <button onClick={() => { setShowNotifications(!showNotifications); setShowUserMenu(false) }} className="p-1.5 hover:bg-muted rounded-lg relative">
+              <Bell className="w-5 h-5" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold">{unreadCount > 9 ? '9+' : unreadCount}</span>
+              )}
+            </button>
+            {showNotifications && (
+              <div className="absolute right-0 top-10 w-80 max-h-96 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-border z-50 overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b">
+                  <p className="font-semibold text-sm">{t('notifications')}</p>
+                  {unreadCount > 0 && (
+                    <button onClick={markAllRead} className="text-xs text-emerald-600 hover:text-emerald-700 font-medium">{t('markAllRead')}</button>
+                  )}
+                </div>
+                <div className="overflow-y-auto max-h-72">
+                  {notifications.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-8">{t('noNotifications')}</p>
+                  ) : (
+                    notifications.map(n => (
+                      <div key={n.id} className={`px-4 py-3 border-b hover:bg-gray-50 dark:hover:bg-gray-700 ${!n.read ? 'bg-emerald-50/50 dark:bg-emerald-900/20' : ''}`}>
+                        <div className="flex items-start gap-2">
+                          {!n.read && <span className="w-2 h-2 bg-emerald-500 rounded-full mt-1.5 flex-shrink-0"></span>}
+                          <div className={n.read ? 'ml-4' : ''}>
+                            <p className="text-sm font-medium">{n.title}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">{n.message}</p>
+                            <p className="text-[10px] text-muted-foreground mt-1">{new Date(n.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
           <div className="relative">
             <button onClick={() => setShowUserMenu(!showUserMenu)} className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium overflow-hidden">
               {user?.avatar ? (
@@ -457,14 +535,18 @@ function BottomNav() {
 
 // ============ DASHBOARD ============
 function DashboardPage() {
-  const { setPage, expenses, receivables, payables, loans, accounts, user } = useAppStore()
+  const { setPage, expenses, receivables, payables, loans, accounts, user, language } = useAppStore()
   const [loading, setLoading] = useState(true)
+
+  const t = (key: TranslationKey): string => translations[language][key] || translations['en'][key] || key
 
   const getGreeting = () => {
     const hour = new Date().getHours()
-    if (hour < 12) return 'Good Morning'
-    if (hour < 17) return 'Good Afternoon'
-    return 'Good Evening'
+    const lang = useAppStore.getState().language
+    const t = (key: TranslationKey) => translations[lang][key] || translations['en'][key] || key
+    if (hour < 12) return t('goodMorning')
+    if (hour < 17) return t('goodAfternoon')
+    return t('goodEvening')
   }
 
   useEffect(() => {
@@ -517,10 +599,10 @@ function DashboardPage() {
       {/* Welcome */}
       <div className="bg-gradient-to-r from-emerald-500 to-teal-600 rounded-2xl p-5 text-white">
         <h2 className="text-xl font-bold">{getGreeting()}, {user?.name?.split(' ')[0]}! 👋</h2>
-        <p className="text-emerald-100 mt-1">Here&apos;s your financial overview</p>
+        <p className="text-emerald-100 mt-1">{t('financialOverview')}</p>
         <div className="mt-4 flex items-end gap-2">
           <span className="text-3xl font-bold">{formatCurrency(totalBalance)}</span>
-          <span className="text-emerald-200 text-sm mb-1">total balance</span>
+          <span className="text-emerald-200 text-sm mb-1">{t('totalBalance')}</span>
         </div>
       </div>
 
@@ -574,7 +656,7 @@ function DashboardPage() {
 
       {/* Quick Actions */}
       <div>
-        <h3 className="font-semibold mb-3">Quick Actions</h3>
+        <h3 className="font-semibold mb-3">{t('quickActions')}</h3>
         <div className="flex gap-3 overflow-x-auto pb-2">
           {quickActions.map(action => (
             <button key={action.label} onClick={() => setPage(action.page)} className="flex flex-col items-center gap-2 min-w-[72px]">
@@ -2359,7 +2441,7 @@ function ToolsPage() {
 
 // ============ PROFILE PAGE ============
 function ProfilePage() {
-  const { user, token, logout, setPage } = useAppStore()
+  const { user, token, logout, setPage, language } = useAppStore()
   const [name, setName] = useState(user?.name || '')
   const [oldPassword, setOldPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -2472,6 +2554,29 @@ function ProfilePage() {
         </CardContent>
       </Card>
 
+      {/* Language Setting */}
+      <Card className="border-0 shadow-md">
+        <CardHeader className="pb-2"><CardTitle className="text-base">🌐 Language / ভাষা</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex gap-3">
+            <button
+              onClick={() => useAppStore.getState().setLanguage('en')}
+              className={`flex-1 p-4 rounded-xl border-2 transition-all ${language === 'en' ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200 hover:border-gray-300'}`}
+            >
+              <p className="font-bold text-lg">English</p>
+              <p className="text-xs text-muted-foreground">View app in English</p>
+            </button>
+            <button
+              onClick={() => useAppStore.getState().setLanguage('bn')}
+              className={`flex-1 p-4 rounded-xl border-2 transition-all ${language === 'bn' ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200 hover:border-gray-300'}`}
+            >
+              <p className="font-bold text-lg">বাংলা</p>
+              <p className="text-xs text-muted-foreground">অ্যাপ বাংলায় দেখুন</p>
+            </button>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Quick Links */}
       <Card className="border-0 shadow-md">
         <CardContent className="p-2">
@@ -2499,11 +2604,14 @@ function ProfilePage() {
 
 // ============ ADMIN PANEL ============
 function AdminPage() {
-  const { setPage, user } = useAppStore()
+  const { setPage, user, token } = useAppStore()
   const [stats, setStats] = useState<Record<string, number>>({})
   const [users, setUsers] = useState<UserInfo[]>([])
   const [selectedUser, setSelectedUser] = useState<UserInfo | null>(null)
   const [userDetail, setUserDetail] = useState<Record<string, unknown[]>>({})
+  const [notifTitle, setNotifTitle] = useState('')
+  const [notifMessage, setNotifMessage] = useState('')
+  const [sendingNotif, setSendingNotif] = useState(false)
 
   useEffect(() => {
     if (user?.role !== 'admin') return
@@ -2581,6 +2689,51 @@ function AdminPage() {
               <p className="text-emerald-200 text-sm">Manage your application</p>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Send Notification */}
+      <Card className="border-0 shadow-md">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Bell className="w-5 h-5 text-emerald-500" /> Send Notification
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div>
+            <Label className="text-xs">Title</Label>
+            <Input value={notifTitle} onChange={e => setNotifTitle(e.target.value)} placeholder="Notification title..." />
+          </div>
+          <div>
+            <Label className="text-xs">Message</Label>
+            <Textarea value={notifMessage} onChange={e => setNotifMessage(e.target.value)} placeholder="Write your message..." rows={3} />
+          </div>
+          <Button
+            onClick={async () => {
+              if (!notifTitle.trim() || !notifMessage.trim()) {
+                toast({ title: 'Error', description: 'Title and message are required.', variant: 'destructive' })
+                return
+              }
+              setSendingNotif(true)
+              try {
+                await apiFetch('/notifications', {
+                  method: 'POST',
+                  body: JSON.stringify({ title: notifTitle, message: notifMessage, sendToAll: true }),
+                  headers: { Authorization: `Bearer ${token}` }
+                })
+                setNotifTitle('')
+                setNotifMessage('')
+                toast({ title: 'Sent!', description: 'Notification sent to all users.' })
+              } catch (err) {
+                toast({ title: 'Failed', description: 'Could not send notification.', variant: 'destructive' })
+              }
+              setSendingNotif(false)
+            }}
+            disabled={sendingNotif}
+            className="w-full bg-emerald-600 hover:bg-emerald-700"
+          >
+            {sendingNotif ? 'Sending...' : '📢 Send to All Users'}
+          </Button>
         </CardContent>
       </Card>
 
@@ -2665,8 +2818,13 @@ function AdminPage() {
 
 // ============ MAIN APP ============
 export default function DailyLifeApp() {
-  const { isAuthenticated, currentPage, token, setAuth, logout } = useAppStore()
+  const { isAuthenticated, currentPage, token, setAuth, logout, language, setLanguage } = useAppStore()
   const [initialized, setInitialized] = useState(false)
+
+  // Translation function
+  const t = (key: TranslationKey): string => {
+    return translations[language][key] || translations['en'][key] || key
+  }
 
   // Check for existing session
   useEffect(() => {
@@ -2695,7 +2853,7 @@ export default function DailyLifeApp() {
           <div className="w-20 h-20 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-center mx-auto mb-4 animate-pulse">
             <Wallet className="w-10 h-10 text-white" />
           </div>
-          <p className="text-muted-foreground">Loading...</p>
+          <p className="text-muted-foreground">{t('loading')}</p>
         </div>
       </div>
     )

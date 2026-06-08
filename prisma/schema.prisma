@@ -26,6 +26,21 @@ model User {
   plans       Plan[]
   documents   Document[]
   alarms      Alarm[]
+  notifications Notification[]
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  title     String
+  message   String
+  userId    String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([read])
 }
 
 model Expense {
