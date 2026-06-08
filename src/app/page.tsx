@@ -350,6 +350,10 @@ function AppHeader() {
           <h1 className="font-semibold text-lg">{getTitle()}</h1>
         </div>
         <div className="flex items-center gap-2">
+          {/* Refresh / Update Button */}
+          <button onClick={() => window.location.reload()} className="p-1.5 hover:bg-muted rounded-lg" title={language === 'bn' ? 'রিফ্রেশ / আপডেট' : 'Refresh / Update'}>
+            <RefreshCw className="w-5 h-5" />
+          </button>
           {/* Language Toggle */}
           <button onClick={() => setLanguage(language === 'bn' ? 'en' : 'bn')} className="px-2 py-1 text-xs font-medium bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200 transition-colors">
             {language === 'bn' ? 'EN' : 'বাং'}
