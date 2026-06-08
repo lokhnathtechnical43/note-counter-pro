@@ -59,7 +59,7 @@ const EXPENSE_COLORS: Record<string, string> = {
 
 // ============ HELPER ============
 function formatCurrency(amount: number): string {
-  return '৳' + amount.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+  return '₹' + amount.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 }
 
 function formatDate(dateStr: string): string {
@@ -1389,20 +1389,20 @@ function NotesPage() {
 // ============ NOTE COUNTER ============
 function NoteCounterPage() {
   const [counts, setCounts] = useState<Record<string, number>>({
-    '1000': 0, '500': 0, '200': 0, '100': 0, '50': 0, '20': 0, '10': 0, '5': 0, '2': 0, '1': 0
+    '2000': 0, '500': 0, '200': 0, '100': 0, '50': 0, '20': 0, '10': 0, '5': 0, '2': 0, '1': 0
   })
 
   const denominations = [
-    { value: 1000, label: '৳1000', color: 'from-red-400 to-red-500' },
-    { value: 500, label: '৳500', color: 'from-orange-400 to-orange-500' },
-    { value: 200, label: '৳200', color: 'from-yellow-400 to-yellow-500' },
-    { value: 100, label: '৳100', color: 'from-green-400 to-green-500' },
-    { value: 50, label: '৳50', color: 'from-teal-400 to-teal-500' },
-    { value: 20, label: '৳20', color: 'from-blue-400 to-blue-500' },
-    { value: 10, label: '৳10', color: 'from-purple-400 to-purple-500' },
-    { value: 5, label: '৳5', color: 'from-pink-400 to-pink-500' },
-    { value: 2, label: '৳2', color: 'from-indigo-400 to-indigo-500' },
-    { value: 1, label: '৳1', color: 'from-gray-400 to-gray-500' },
+    { value: 2000, label: '₹2000', color: 'from-red-400 to-red-500' },
+    { value: 500, label: '₹500', color: 'from-orange-400 to-orange-500' },
+    { value: 200, label: '₹200', color: 'from-yellow-400 to-yellow-500' },
+    { value: 100, label: '₹100', color: 'from-green-400 to-green-500' },
+    { value: 50, label: '₹50', color: 'from-teal-400 to-teal-500' },
+    { value: 20, label: '₹20', color: 'from-blue-400 to-blue-500' },
+    { value: 10, label: '₹10', color: 'from-purple-400 to-purple-500' },
+    { value: 5, label: '₹5', color: 'from-pink-400 to-pink-500' },
+    { value: 2, label: '₹2', color: 'from-indigo-400 to-indigo-500' },
+    { value: 1, label: '₹1', color: 'from-gray-400 to-gray-500' },
   ]
 
   const total = denominations.reduce((sum, d) => sum + (d.value * (counts[String(d.value)] || 0)), 0)
@@ -1434,7 +1434,7 @@ function NoteCounterPage() {
         ))}
       </div>
 
-      <Button variant="outline" className="w-full" onClick={() => setCounts({ '1000': 0, '500': 0, '200': 0, '100': 0, '50': 0, '20': 0, '10': 0, '5': 0, '2': 0, '1': 0 })}>
+      <Button variant="outline" className="w-full" onClick={() => setCounts({ '2000': 0, '500': 0, '200': 0, '100': 0, '50': 0, '20': 0, '10': 0, '5': 0, '2': 0, '1': 0 })}>
         <RefreshCw className="w-4 h-4 mr-2" /> Reset All
       </Button>
     </div>
