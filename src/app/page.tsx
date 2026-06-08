@@ -1922,10 +1922,13 @@ function DocScannerPage() {
   const [activeTab, setActiveTab] = useState<'new' | 'vault'>('new')
   const [autoSave, setAutoSave] = useState(false)
   const videoRef = React.useRef<HTMLVideoElement>(null)
-  const canvasRef = React.useRef<HTMLCanvasElement>(null)
-  const [cropStart, setCropStart] = useState<{ x: number; y: number } | null>(null)
-  const [cropEnd, setCropEnd] = useState<{ x: number; y: number } | null>(null)
-  const [naturalSize, setNaturalSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 })
+
+  // New crop state: 4 corner points as percentages (0-1) of the image
+  const [cropCorners, setCropCorners] = useState<{ tl: { x: number; y: number }; tr: { x: number; y: number }; br: { x: number; y: number }; bl: { x: number; y: number } } | null>(null)
+  const [draggingHandle, setDraggingHandle] = useState<string | null>(null) // 'tl','tr','br','bl','top','right','bottom','left'
+  const imageContainerRef = React.useRef<HTMLDivElement>(null)
+  const [imageNaturalSize, setImageNaturalSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 })
+  const [rotation, setRotation] = useState(0) // 0, 90, 180, 270
   const [vaultLoaded, setVaultLoaded] = useState(false)
 
   // Load vault documents on mount
@@ -2089,28 +2092,83 @@ function DocScannerPage() {
     toast({ title: language === 'bn' ? `${unsaved.length}টি ডকুমেন্ট ডকভল্টে সেভ হয়েছে!` : `${unsaved.length} documents saved to DocVault!` })
   }
 
-  const handleCropMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!cropMode) return
-    const rect = canvasRef.current?.getBoundingClientRect()
-    if (!rect) return
-    const x = ((e.clientX - rect.left) / rect.width) * naturalSize.w
-    const y = ((e.clientY - rect.top) / rect.height) * naturalSize.h
-    setCropStart({ x, y })
-    setCropEnd(null)
+  const handleCropMouseDown = (e: React.MouseEvent | React.TouchEvent, handle: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDraggingHandle(handle)
   }
 
-  const handleCropMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!cropMode || !cropStart) return
-    const rect = canvasRef.current?.getBoundingClientRect()
-    if (!rect) return
-    const x = ((e.clientX - rect.left) / rect.width) * naturalSize.w
-    const y = ((e.clientY - rect.top) / rect.height) * naturalSize.h
-    setCropEnd({ x, y })
-    drawEditorCanvas()
+  const handlePointerMove = useCallback((clientX: number, clientY: number) => {
+    if (!draggingHandle || !cropCorners || !imageContainerRef.current) return
+    const rect = imageContainerRef.current.getBoundingClientRect()
+    // Convert client coords to percentage (0-1) within the image container
+    const px = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
+    const py = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
+
+    setCropCorners(prev => {
+      if (!prev) return prev
+      const updated = { ...prev, tl: { ...prev.tl }, tr: { ...prev.tr }, br: { ...prev.br }, bl: { ...prev.bl } }
+      switch (draggingHandle) {
+        case 'tl': updated.tl = { x: px, y: py }; break
+        case 'tr': updated.tr = { x: px, y: py }; break
+        case 'br': updated.br = { x: px, y: py }; break
+        case 'bl': updated.bl = { x: px, y: py }; break
+        case 'top': updated.tl = { ...updated.tl, y: py }; updated.tr = { ...updated.tr, y: py }; break
+        case 'bottom': updated.bl = { ...updated.bl, y: py }; updated.br = { ...updated.br, y: py }; break
+        case 'left': updated.tl = { ...updated.tl, x: px }; updated.bl = { ...updated.bl, x: px }; break
+        case 'right': updated.tr = { ...updated.tr, x: px }; updated.br = { ...updated.br, x: px }; break
+      }
+      return updated
+    })
+  }, [draggingHandle, cropCorners])
+
+  const handlePointerUp = useCallback(() => {
+    setDraggingHandle(null)
+  }, [])
+
+  // Global pointer move/up listeners
+  useEffect(() => {
+    if (!draggingHandle) return
+    const onMove = (e: PointerEvent) => handlePointerMove(e.clientX, e.clientY)
+    const onUp = () => handlePointerUp()
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+  }, [draggingHandle, handlePointerMove, handlePointerUp])
+
+  const applyCrop = () => {
+    const doc = scannedDocs.find(d => d.id === editingDoc)
+    if (!doc || !cropCorners) return
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const img = new Image()
+    img.src = doc.data
+    const nw = img.naturalWidth || 800
+    const nh = img.naturalHeight || 600
+    const x = Math.round(cropCorners.tl.x * nw)
+    const y = Math.round(cropCorners.tl.y * nh)
+    const w = Math.round((cropCorners.br.x - cropCorners.tl.x) * nw)
+    const h = Math.round((cropCorners.br.y - cropCorners.tl.y) * nh)
+    if (w < 20 || h < 20) { toast({ title: language === 'bn' ? 'ক্রপ এরিয়া ছোট হয়েছে' : 'Crop area too small', variant: 'destructive' }); return }
+    canvas.width = w
+    canvas.height = h
+    ctx.drawImage(img, x, y, w, h, 0, 0, w, h)
+    const croppedData = canvas.toDataURL('image/jpeg', 0.85)
+    setScannedDocs(prev => prev.map(d => d.id === editingDoc ? { ...d, data: croppedData, filter: 'original' as ScanFilter, savedToVault: false } : d))
+    setCropMode(false)
+    setCropCorners(null)
+    toast({ title: language === 'bn' ? 'ক্রপ হয়েছে!' : 'Cropped!' })
   }
 
-  const handleCropMouseUp = () => {
-    if (!cropMode || !cropStart || !cropEnd) return
+  const resetCrop = () => {
+    setCropCorners({ tl: { x: 0.05, y: 0.05 }, tr: { x: 0.95, y: 0.05 }, br: { x: 0.95, y: 0.95 }, bl: { x: 0.05, y: 0.95 } })
+  }
+
+  const rotateImage = (degrees: number) => {
     const doc = scannedDocs.find(d => d.id === editingDoc)
     if (!doc) return
     const canvas = document.createElement('canvas')
@@ -2118,90 +2176,22 @@ function DocScannerPage() {
     if (!ctx) return
     const img = new Image()
     img.src = doc.data
-    const x = Math.min(cropStart.x, cropEnd.x)
-    const y = Math.min(cropStart.y, cropEnd.y)
-    const w = Math.abs(cropEnd.x - cropStart.x)
-    const h = Math.abs(cropEnd.y - cropStart.y)
-    if (w < 10 || h < 10) { setCropStart(null); setCropEnd(null); return }
-    canvas.width = w
-    canvas.height = h
-    ctx.drawImage(img, x, y, w, h, 0, 0, w, h)
-    const croppedData = canvas.toDataURL('image/jpeg', 0.85)
-    setScannedDocs(prev => prev.map(d => d.id === editingDoc ? { ...d, data: croppedData, filter: 'original' as ScanFilter, savedToVault: false } : d))
-    setCropStart(null)
-    setCropEnd(null)
-    setCropMode(false)
-    toast({ title: language === 'bn' ? 'ক্রপ হয়েছে!' : 'Cropped!' })
-  }
-
-  const drawEditorCanvas = useCallback(() => {
-    const canvas = canvasRef.current
-    const doc = scannedDocs.find(d => d.id === editingDoc)
-    if (!canvas || !doc) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    const img = new Image()
-    img.onload = () => {
-      canvas.width = img.naturalWidth
-      canvas.height = img.naturalHeight
-      setNaturalSize({ w: img.naturalWidth, h: img.naturalHeight })
-      ctx.drawImage(img, 0, 0)
-      // Apply live filter preview
-      if (doc.filter !== 'original') {
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-        const data = imageData.data
-        if (doc.filter === 'bw') {
-          for (let i = 0; i < data.length; i += 4) {
-            const avg = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114
-            const val = avg > 128 ? 255 : 0
-            data[i] = val; data[i + 1] = val; data[i + 2] = val
-          }
-        } else if (doc.filter === 'grayscale') {
-          for (let i = 0; i < data.length; i += 4) {
-            const avg = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114
-            data[i] = avg; data[i + 1] = avg; data[i + 2] = avg
-          }
-        } else if (doc.filter === 'photo') {
-          for (let i = 0; i < data.length; i += 4) {
-            data[i] = Math.min(255, data[i] * 1.15)
-            data[i + 1] = Math.min(255, data[i + 1] * 1.15)
-            data[i + 2] = Math.min(255, data[i + 2] * 1.15)
-          }
-        } else if (doc.filter === 'sepia') {
-          for (let i = 0; i < data.length; i += 4) {
-            const r = data[i], g = data[i + 1], b = data[i + 2]
-            data[i] = Math.min(255, r * 0.393 + g * 0.769 + b * 0.189)
-            data[i + 1] = Math.min(255, r * 0.349 + g * 0.686 + b * 0.168)
-            data[i + 2] = Math.min(255, r * 0.272 + g * 0.534 + b * 0.131)
-          }
-        }
-        ctx.putImageData(imageData, 0, 0)
-      }
-      // Draw crop overlay
-      if (cropStart && cropEnd) {
-        ctx.strokeStyle = '#22c55e'
-        ctx.lineWidth = 3
-        ctx.setLineDash([8, 4])
-        const cx = Math.min(cropStart.x, cropEnd.x)
-        const cy = Math.min(cropStart.y, cropEnd.y)
-        const cw = Math.abs(cropEnd.x - cropStart.x)
-        const ch = Math.abs(cropEnd.y - cropStart.y)
-        ctx.strokeRect(cx, cy, cw, ch)
-        // Dim outside area
-        ctx.fillStyle = 'rgba(0,0,0,0.4)'
-        ctx.fillRect(0, 0, canvas.width, cy)
-        ctx.fillRect(0, cy, cx, ch)
-        ctx.fillRect(cx + cw, cy, canvas.width - cx - cw, ch)
-        ctx.fillRect(0, cy + ch, canvas.width, canvas.height - cy - ch)
-        ctx.setLineDash([])
-      }
+    const nw = img.naturalWidth || 800
+    const nh = img.naturalHeight || 600
+    if (degrees === 90 || degrees === 270) {
+      canvas.width = nh; canvas.height = nw
+    } else {
+      canvas.width = nw; canvas.height = nh
     }
-    img.src = doc.data
-  }, [editingDoc, scannedDocs, cropStart, cropEnd])
-
-  useEffect(() => {
-    if (editingDoc) drawEditorCanvas()
-  }, [editingDoc, drawEditorCanvas, scannedDocs])
+    ctx.translate(canvas.width / 2, canvas.height / 2)
+    ctx.rotate((degrees * Math.PI) / 180)
+    ctx.drawImage(img, -nw / 2, -nh / 2)
+    const rotatedData = canvas.toDataURL('image/jpeg', 0.85)
+    setScannedDocs(prev => prev.map(d => d.id === editingDoc ? { ...d, data: rotatedData, filter: 'original' as ScanFilter, savedToVault: false } : d))
+    setRotation(prev => (prev + degrees) % 360)
+    // Reset crop corners after rotation
+    setCropCorners({ tl: { x: 0.05, y: 0.05 }, tr: { x: 0.95, y: 0.05 }, br: { x: 0.95, y: 0.95 }, bl: { x: 0.05, y: 0.95 } })
+  }
 
   // Generate collage
   const generateCollage = (): string | null => {
@@ -2292,77 +2282,192 @@ function DocScannerPage() {
 
   // ============ EDITOR VIEW ============
   if (editingDoc && editingDocData) {
+    const filteredSrc = getFilteredData(editingDocData)
+    // Initialize crop corners when entering crop mode
+    const currentCropCorners = cropCorners || { tl: { x: 0.05, y: 0.05 }, tr: { x: 0.95, y: 0.05 }, br: { x: 0.95, y: 0.95 }, bl: { x: 0.05, y: 0.95 } }
+
     return (
-      <div className="p-4 pb-24 space-y-4">
-        <div className="flex items-center gap-3 mb-2">
-          <Button variant="ghost" size="sm" onClick={() => { setEditingDoc(null); setCropMode(false); setCropStart(null); setCropEnd(null) }}>
-            <ChevronLeft className="w-5 h-5 mr-1" /> {language === 'bn' ? 'ফিরে যান' : 'Back'}
-          </Button>
-          <h2 className="font-semibold">{language === 'bn' ? 'স্ক্যান সম্পাদনা' : 'Edit Scan'}</h2>
-          {editingDocData.savedToVault && (
-            <Badge className="bg-emerald-100 text-emerald-700 text-[10px]">
-              <CheckCircle className="w-3 h-3 mr-1" /> {language === 'bn' ? 'সেভ হয়েছে' : 'Saved'}
-            </Badge>
+      <div className="flex flex-col h-[100dvh] bg-black">
+        {/* Green Header */}
+        <div className="flex items-center justify-between px-4 py-3 bg-emerald-700 shrink-0">
+          <button onClick={() => { setEditingDoc(null); setCropMode(false); setCropCorners(null); setRotation(0) }} className="text-white flex items-center gap-1">
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <h2 className="text-white font-semibold text-base">{cropMode ? (language === 'bn' ? 'বর্ডার সমন্বয়' : 'Border Adjustment') : (language === 'bn' ? 'স্ক্যান সম্পাদনা' : 'Edit Scan')}</h2>
+          {cropMode ? (
+            <button onClick={applyCrop} className="text-white">
+              <CheckCircle className="w-6 h-6" />
+            </button>
+          ) : (
+            <div className="w-6" />
           )}
         </div>
 
-        {/* Canvas Editor */}
-        <div className="relative rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 border">
-          <canvas
-            ref={canvasRef}
-            className={`w-full ${cropMode ? 'cursor-crosshair' : 'cursor-default'}`}
-            style={{ maxHeight: '60vh', objectFit: 'contain' }}
-            onMouseDown={handleCropMouseDown}
-            onMouseMove={handleCropMouseMove}
-            onMouseUp={handleCropMouseUp}
+        {/* Main Image Area */}
+        <div className="flex-1 relative flex items-center justify-center overflow-hidden bg-black" ref={imageContainerRef}>
+          {/* Image */}
+          <img
+            src={filteredSrc}
+            alt="Scan"
+            className="w-full h-full object-contain select-none"
+            draggable={false}
+            onLoad={(e) => {
+              const img = e.target as HTMLImageElement
+              setImageNaturalSize({ w: img.naturalWidth, h: img.naturalHeight })
+            }}
           />
+
+          {/* Crop Overlay */}
+          {cropMode && (
+            <>
+              {/* Dimmed areas - using absolute positioning with clip paths */}
+              {/* Top dim */}
+              <div className="absolute inset-0 pointer-events-none" style={{
+                clipPath: `polygon(
+                  0% 0%, 100% 0%, 100% ${currentCropCorners.tl.y * 100}%, ${currentCropCorners.tl.x * 100}% ${currentCropCorners.tl.y * 100}%, ${currentCropCorners.tl.x * 100}% ${currentCropCorners.bl.y * 100}%, ${currentCropCorners.bl.x * 100}% ${currentCropCorners.bl.y * 100}%, ${currentCropCorners.bl.x * 100}% ${currentCropCorners.tl.y * 100}%, 0% ${currentCropCorners.tl.y * 100}%
+                )`,
+                backgroundColor: 'rgba(0,0,0,0.55)'
+              }} />
+              {/* Bottom dim */}
+              <div className="absolute inset-0 pointer-events-none" style={{
+                clipPath: `polygon(
+                  0% ${currentCropCorners.bl.y * 100}%, ${currentCropCorners.bl.x * 100}% ${currentCropCorners.bl.y * 100}%, ${currentCropCorners.br.x * 100}% ${currentCropCorners.br.y * 100}%, 100% ${currentCropCorners.br.y * 100}%, 100% 100%, 0% 100%
+                )`,
+                backgroundColor: 'rgba(0,0,0,0.55)'
+              }} />
+              {/* Left dim */}
+              <div className="absolute inset-0 pointer-events-none" style={{
+                clipPath: `polygon(
+                  0% ${currentCropCorners.tl.y * 100}%, ${currentCropCorners.tl.x * 100}% ${currentCropCorners.tl.y * 100}%, ${currentCropCorners.bl.x * 100}% ${currentCropCorners.bl.y * 100}%, ${currentCropCorners.bl.x * 100}% ${currentCropCorners.br.y * 100}%, 0% ${currentCropCorners.bl.y * 100}%
+                )`,
+                backgroundColor: 'rgba(0,0,0,0.55)'
+              }} />
+              {/* Right dim */}
+              <div className="absolute inset-0 pointer-events-none" style={{
+                clipPath: `polygon(
+                  ${currentCropCorners.tr.x * 100}% ${currentCropCorners.tr.y * 100}%, 100% ${currentCropCorners.tr.y * 100}%, 100% ${currentCropCorners.br.y * 100}%, ${currentCropCorners.br.x * 100}% ${currentCropCorners.br.y * 100}%
+                )`,
+                backgroundColor: 'rgba(0,0,0,0.55)'
+              }} />
+
+              {/* Green border lines */}
+              <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 10 }}>
+                <line x1={`${currentCropCorners.tl.x * 100}%`} y1={`${currentCropCorners.tl.y * 100}%`} x2={`${currentCropCorners.tr.x * 100}%`} y2={`${currentCropCorners.tr.y * 100}%`} stroke="#22c55e" strokeWidth="2.5" />
+                <line x1={`${currentCropCorners.tr.x * 100}%`} y1={`${currentCropCorners.tr.y * 100}%`} x2={`${currentCropCorners.br.x * 100}%`} y2={`${currentCropCorners.br.y * 100}%`} stroke="#22c55e" strokeWidth="2.5" />
+                <line x1={`${currentCropCorners.br.x * 100}%`} y1={`${currentCropCorners.br.y * 100}%`} x2={`${currentCropCorners.bl.x * 100}%`} y2={`${currentCropCorners.bl.y * 100}%`} stroke="#22c55e" strokeWidth="2.5" />
+                <line x1={`${currentCropCorners.bl.x * 100}%`} y1={`${currentCropCorners.bl.y * 100}%`} x2={`${currentCropCorners.tl.x * 100}%`} y2={`${currentCropCorners.tl.y * 100}%`} stroke="#22c55e" strokeWidth="2.5" />
+                {/* Grid lines (3x3) */}
+                <line x1={`${(currentCropCorners.tl.x * 2 + currentCropCorners.tr.x) / 3 * 100}%`} y1={`${currentCropCorners.tl.y * 100}%`} x2={`${(currentCropCorners.bl.x * 2 + currentCropCorners.br.x) / 3 * 100}%`} y2={`${currentCropCorners.bl.y * 100}%`} stroke="rgba(255,255,255,0.25)" strokeWidth="0.5" />
+                <line x1={`${(currentCropCorners.tl.x + currentCropCorners.tr.x * 2) / 3 * 100}%`} y1={`${currentCropCorners.tr.y * 100}%`} x2={`${(currentCropCorners.bl.x + currentCropCorners.br.x * 2) / 3 * 100}%`} y2={`${currentCropCorners.br.y * 100}%`} stroke="rgba(255,255,255,0.25)" strokeWidth="0.5" />
+                <line x1={`${currentCropCorners.tl.x * 100}%`} y1={`${(currentCropCorners.tl.y * 2 + currentCropCorners.bl.y) / 3 * 100}%`} x2={`${currentCropCorners.tr.x * 100}%`} y2={`${(currentCropCorners.tr.y * 2 + currentCropCorners.br.y) / 3 * 100}%`} stroke="rgba(255,255,255,0.25)" strokeWidth="0.5" />
+                <line x1={`${currentCropCorners.tl.x * 100}%`} y1={`${(currentCropCorners.tl.y + currentCropCorners.bl.y * 2) / 3 * 100}%`} x2={`${currentCropCorners.tr.x * 100}%`} y2={`${(currentCropCorners.tr.y + currentCropCorners.br.y * 2) / 3 * 100}%`} stroke="rgba(255,255,255,0.25)" strokeWidth="0.5" />
+              </svg>
+
+              {/* Corner Handles (circles) */}
+              {(['tl', 'tr', 'br', 'bl'] as const).map(corner => {
+                const pos = currentCropCorners[corner]
+                return (
+                  <button
+                    key={corner}
+                    onPointerDown={(e) => handleCropMouseDown(e, corner)}
+                    className="absolute z-20 w-8 h-8 -ml-4 -mt-4 flex items-center justify-center touch-none"
+                    style={{ left: `${pos.x * 100}%`, top: `${pos.y * 100}%` }}
+                  >
+                    <div className="w-5 h-5 rounded-full bg-emerald-500 border-2 border-white shadow-lg shadow-black/30" />
+                  </button>
+                )
+              })}
+
+              {/* Edge Handles (squares) */}
+              {[
+                { id: 'top', pos: { x: (currentCropCorners.tl.x + currentCropCorners.tr.x) / 2, y: (currentCropCorners.tl.y + currentCropCorners.tr.y) / 2 } },
+                { id: 'bottom', pos: { x: (currentCropCorners.bl.x + currentCropCorners.br.x) / 2, y: (currentCropCorners.bl.y + currentCropCorners.br.y) / 2 } },
+                { id: 'left', pos: { x: (currentCropCorners.tl.x + currentCropCorners.bl.x) / 2, y: (currentCropCorners.tl.y + currentCropCorners.bl.y) / 2 } },
+                { id: 'right', pos: { x: (currentCropCorners.tr.x + currentCropCorners.br.x) / 2, y: (currentCropCorners.tr.y + currentCropCorners.br.y) / 2 } },
+              ].map(({ id, pos }) => (
+                <button
+                  key={id}
+                  onPointerDown={(e) => handleCropMouseDown(e, id)}
+                  className="absolute z-20 w-8 h-8 -ml-4 -mt-4 flex items-center justify-center touch-none"
+                  style={{ left: `${pos.x * 100}%`, top: `${pos.y * 100}%` }}
+                >
+                  <div className={`w-4 h-4 bg-emerald-500 border-2 border-white shadow-lg shadow-black/30 ${id === 'top' || id === 'bottom' ? 'rounded-sm' : 'rounded-sm'}`} />
+                </button>
+              ))}
+            </>
+          )}
         </div>
 
-        {/* Filter & Crop Tools */}
-        <div className="space-y-3">
-          <div>
-            <p className="text-sm font-semibold mb-2">{language === 'bn' ? 'ফিল্টার' : 'Filters'}</p>
-            <div className="flex gap-2 flex-wrap">
-              {(Object.keys(filterLabels) as ScanFilter[]).map(f => (
-                <Button
-                  key={f}
-                  variant={editingDocData.filter === f ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => applyFilter(editingDoc!, f)}
-                  className={editingDocData.filter === f ? filterLabels[f].color : ''}
-                >
-                  {language === 'bn' ? filterLabels[f].labelBn : filterLabels[f].label}
-                </Button>
-              ))}
+        {/* Bottom Toolbar */}
+        {cropMode ? (
+          <div className="flex items-center justify-around px-6 py-4 bg-emerald-700 shrink-0">
+            <button onClick={resetCrop} className="flex flex-col items-center gap-1 text-white/80 hover:text-white">
+              <Grid3X3 className="w-5 h-5" />
+              <span className="text-[10px]">{language === 'bn' ? 'রিসেট' : 'Reset'}</span>
+            </button>
+            <button onClick={applyCrop} className="flex flex-col items-center gap-1 text-white/80 hover:text-white">
+              <FileEdit className="w-5 h-5" />
+              <span className="text-[10px]">{language === 'bn' ? 'ক্রপ' : 'Crop'}</span>
+            </button>
+            <button onClick={() => rotateImage(90)} className="flex flex-col items-center gap-1 text-white/80 hover:text-white">
+              <RefreshCw className="w-5 h-5" />
+              <span className="text-[10px]">{language === 'bn' ? 'ঘোরান' : 'Rotate'}</span>
+            </button>
+            <button onClick={() => rotateImage(-90)} className="flex flex-col items-center gap-1 text-white/80 hover:text-white">
+              <RefreshCw className="w-5 h-5 transform -scale-x-100" />
+              <span className="text-[10px]">{language === 'bn' ? 'উল্টো' : 'Rev'}</span>
+            </button>
+            <button onClick={applyCrop} className="flex flex-col items-center gap-1 text-white">
+              <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center">
+                <CheckCircle className="w-6 h-6 text-emerald-600" />
+              </div>
+            </button>
+          </div>
+        ) : (
+          <div className="bg-gray-900 shrink-0">
+            {/* Filter bar */}
+            <div className="px-4 py-3">
+              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+                {(Object.keys(filterLabels) as ScanFilter[]).map(f => (
+                  <Button
+                    key={f}
+                    variant={editingDocData.filter === f ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => applyFilter(editingDoc!, f)}
+                    className={`shrink-0 text-xs ${editingDocData.filter === f ? filterLabels[f].color : ''}`}
+                  >
+                    {language === 'bn' ? filterLabels[f].labelBn : filterLabels[f].label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            {/* Action buttons */}
+            <div className="flex items-center gap-2 px-4 pb-4 pt-1">
+              <Button
+                onClick={() => { setCropMode(true); setCropCorners({ tl: { x: 0.05, y: 0.05 }, tr: { x: 0.95, y: 0.05 }, br: { x: 0.95, y: 0.95 }, bl: { x: 0.05, y: 0.95 } }) }}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+              >
+                <FileEdit className="w-4 h-4 mr-1" /> {language === 'bn' ? 'ক্রপ' : 'Crop'}
+              </Button>
+              <Button
+                onClick={() => rotateImage(90)}
+                variant="outline"
+                className="text-white border-gray-600 hover:bg-gray-800"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </Button>
+              <Button
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                onClick={() => saveSingleToVault(editingDocData)}
+              >
+                <FolderLock className="w-4 h-4 mr-1" /> {editingDocData.savedToVault ? (language === 'bn' ? 'আপডেট' : 'Update') : (language === 'bn' ? 'সেভ' : 'Save')}
+              </Button>
+              <Button variant="outline" onClick={() => { removeDoc(editingDocData.id); setEditingDoc(null) }} className="text-red-400 border-gray-600 hover:bg-gray-800 hover:text-red-300">
+                <Trash2 className="w-4 h-4" />
+              </Button>
             </div>
           </div>
-
-          <div className="flex gap-2">
-            <Button
-              variant={cropMode ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => { setCropMode(!cropMode); setCropStart(null); setCropEnd(null) }}
-              className={cropMode ? 'bg-emerald-600' : ''}
-            >
-              <FileEdit className="w-4 h-4 mr-1" /> {cropMode ? (language === 'bn' ? 'ক্রপ করতে টানুন' : 'Drag to Crop') : (language === 'bn' ? 'ক্রপ' : 'Crop')}
-            </Button>
-            {cropMode && cropStart && cropEnd && (
-              <Button size="sm" onClick={handleCropMouseUp} className="bg-emerald-600">
-                {language === 'bn' ? 'ক্রপ প্রয়োগ' : 'Apply Crop'}
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {/* Save */}
-        <div className="flex gap-2">
-          <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700" onClick={() => saveSingleToVault(editingDocData)}>
-            <FolderLock className="w-4 h-4 mr-2" /> {editingDocData.savedToVault ? (language === 'bn' ? 'আপডেট করুন' : 'Update') : (language === 'bn' ? 'ভল্টে সেভ করুন' : 'Save to Vault')}
-          </Button>
-          <Button variant="outline" onClick={() => { removeDoc(editingDocData.id); setEditingDoc(null) }} className="text-red-500 hover:text-red-600">
-            <Trash2 className="w-4 h-4" />
-          </Button>
-        </div>
+        )}
       </div>
     )
   }
