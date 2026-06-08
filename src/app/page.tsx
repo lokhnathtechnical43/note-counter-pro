@@ -302,7 +302,7 @@ function AppHeader() {
   }
 
   // Fetch notifications
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     if (!token) return
     try {
       const data = await apiFetch('/notifications', {
@@ -311,13 +311,15 @@ function AppHeader() {
       setNotifications(data.notifications || [])
       setUnreadCount(data.unreadCount || 0)
     } catch {}
-  }
+  }, [token])
 
   useEffect(() => {
-    fetchNotifications()
+    if (!token) return
+    const load = async () => { await fetchNotifications() }
+    load()
     const interval = setInterval(fetchNotifications, 30000)
     return () => clearInterval(interval)
-  }, [token])
+  }, [fetchNotifications])
 
   const markAllRead = async () => {
     try {
@@ -1684,7 +1686,7 @@ function NoteCounterPage() {
     toast({ title: language === 'bn' ? 'ইতিহাস মুছে ফেলা হয়েছে' : 'History Cleared', description: language === 'bn' ? 'সব ক্যালকুলেশন ইতিহাস মুছে ফেলা হয়েছে' : 'All calculation history has been cleared.' })
   }
 
-  const useHistoryResult = (result: string) => {
+  const applyHistoryResult = (result: string) => {
     setCalcDisplay(result)
     setCalcPrevious(null)
     setCalcOperation(null)
@@ -1759,7 +1761,7 @@ function NoteCounterPage() {
               ) : (
                 <div className="space-y-1 px-2 pb-2">
                   {calcHistory.map(entry => (
-                    <button key={entry.id} onClick={() => useHistoryResult(entry.result)}
+                    <button key={entry.id} onClick={() => applyHistoryResult(entry.result)}
                       className="w-full text-right p-2 rounded-lg hover:bg-gray-700 transition-colors group">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1">
@@ -3302,7 +3304,7 @@ function CalculatorPage() {
     toast({ title: language === 'bn' ? 'ইতিহাস মুছে ফেলা হয়েছে' : 'History Cleared', description: language === 'bn' ? 'সব ক্যালকুলেশন ইতিহাস মুছে ফেলা হয়েছে' : 'All calculation history has been cleared.' })
   }
 
-  const useHistoryResult = (result: string) => {
+  const applyHistoryResult = (result: string) => {
     setDisplay(result)
     setPreviousValue(null)
     setOperation(null)
@@ -3354,7 +3356,7 @@ function CalculatorPage() {
             ) : (
               <div className="space-y-1 px-2 pb-2">
                 {calcHistory.map(entry => (
-                  <button key={entry.id} onClick={() => useHistoryResult(entry.result)}
+                  <button key={entry.id} onClick={() => applyHistoryResult(entry.result)}
                     className="w-full text-right p-2 rounded-lg hover:bg-gray-700 transition-colors group">
                     <p className="text-gray-500 text-[10px]">{entry.date}</p>
                     <p className="text-gray-400 text-xs">{entry.expression}</p>
