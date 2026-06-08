@@ -1935,74 +1935,62 @@ function DocScannerPage() {
   const [magnifier, setMagnifier] = useState<{ x: number; y: number; show: boolean }>({ x: 0, y: 0, show: false })
 
   // Simple drag tracking ref
-  const dragRef = useRef<{ handle: string; pointerId: number } | null>(null)
+  const dragRef = useRef<string | null>(null) // just the handle id
   // Pre-loaded image for magnifier and crop/rotate operations
   const magnifierImgRef = useRef<HTMLImageElement | null>(null)
   const [magnifierImgReady, setMagnifierImgReady] = useState(false)
 
-  // ============ CROP DRAG - Pointer Capture on handles ============
-  // This is the MOST reliable mobile drag pattern:
-  // setPointerCapture redirects ALL pointer events to the handle element,
-  // so onPointerMove/onPointerUp on the handle work even if finger moves outside.
-  // No document/window listeners needed!
+  // ============ CROP DRAG - Full-screen overlay pattern ============
+  // The ONLY reliable mobile drag pattern: when drag starts, show a full-screen
+  // invisible overlay that captures ALL pointer events. This prevents the browser
+  // from scrolling, zooming, or losing the touch. All move/up events go to the overlay.
+  // Used by react-image-crop, Cropper.js, CamScanner web, etc.
 
-  const getCropHandleHandlers = (handleId: string) => ({
-    onPointerDown: (e: React.PointerEvent) => {
-      e.preventDefault()
-      e.stopPropagation()
-      // Capture pointer - ALL subsequent events go to THIS element
-      ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-      dragRef.current = { handle: handleId, pointerId: e.pointerId }
-      setDraggingHandle(handleId)
-      setMagnifier(prev => ({ ...prev, show: true }))
-    },
-    onPointerMove: (e: React.PointerEvent) => {
-      const drag = dragRef.current
-      if (!drag || drag.handle !== handleId) return
+  const startCropDrag = (e: React.PointerEvent, handleId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragRef.current = handleId
+    setDraggingHandle(handleId)
+    setMagnifier(prev => ({ ...prev, show: true }))
+  }
 
-      if (!imageRef.current) return
-      const imgRect = imageRef.current.getBoundingClientRect()
-      if (!imgRect.width || !imgRect.height) return
+  const handleOverlayMove = (e: React.PointerEvent) => {
+    const handle = dragRef.current
+    if (!handle) return
+    e.preventDefault()
 
-      const px = Math.max(0, Math.min(1, (e.clientX - imgRect.left) / imgRect.width))
-      const py = Math.max(0, Math.min(1, (e.clientY - imgRect.top) / imgRect.height))
+    if (!imageRef.current) return
+    const imgRect = imageRef.current.getBoundingClientRect()
+    if (!imgRect.width || !imgRect.height) return
 
-      setMagnifier({ x: px, y: py, show: true })
+    const px = Math.max(0, Math.min(1, (e.clientX - imgRect.left) / imgRect.width))
+    const py = Math.max(0, Math.min(1, (e.clientY - imgRect.top) / imgRect.height))
 
-      setCropCorners(prev => {
-        if (!prev) return prev
-        const u = { ...prev, tl: { ...prev.tl }, tr: { ...prev.tr }, br: { ...prev.br }, bl: { ...prev.bl } }
-        switch (drag.handle) {
-          case 'tl': u.tl = { x: px, y: py }; break
-          case 'tr': u.tr = { x: px, y: py }; break
-          case 'br': u.br = { x: px, y: py }; break
-          case 'bl': u.bl = { x: px, y: py }; break
-          case 'top': u.tl = { ...u.tl, y: py }; u.tr = { ...u.tr, y: py }; break
-          case 'bottom': u.bl = { ...u.bl, y: py }; u.br = { ...u.br, y: py }; break
-          case 'left': u.tl = { ...u.tl, x: px }; u.bl = { ...u.bl, x: px }; break
-          case 'right': u.tr = { ...u.tr, x: px }; u.br = { ...u.br, x: px }; break
-        }
-        return u
-      })
-    },
-    onPointerUp: (e: React.PointerEvent) => {
-      const drag = dragRef.current
-      if (!drag || drag.handle !== handleId) return
-      try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId) } catch {}
-      dragRef.current = null
-      setDraggingHandle(null)
-      setMagnifier(prev => ({ ...prev, show: false }))
-    },
-    onLostPointerCapture: () => {
-      // Failsafe: if capture is lost unexpectedly, clean up
-      const drag = dragRef.current
-      if (drag && drag.handle === handleId) {
-        dragRef.current = null
-        setDraggingHandle(null)
-        setMagnifier(prev => ({ ...prev, show: false }))
+    setMagnifier({ x: px, y: py, show: true })
+
+    setCropCorners(prev => {
+      if (!prev) return prev
+      const u = { ...prev, tl: { ...prev.tl }, tr: { ...prev.tr }, br: { ...prev.br }, bl: { ...prev.bl } }
+      switch (handle) {
+        case 'tl': u.tl = { x: px, y: py }; break
+        case 'tr': u.tr = { x: px, y: py }; break
+        case 'br': u.br = { x: px, y: py }; break
+        case 'bl': u.bl = { x: px, y: py }; break
+        case 'top': u.tl = { ...u.tl, y: py }; u.tr = { ...u.tr, y: py }; break
+        case 'bottom': u.bl = { ...u.bl, y: py }; u.br = { ...u.br, y: py }; break
+        case 'left': u.tl = { ...u.tl, x: px }; u.bl = { ...u.bl, x: px }; break
+        case 'right': u.tr = { ...u.tr, x: px }; u.br = { ...u.br, x: px }; break
       }
-    },
-  })
+      return u
+    })
+  }
+
+  const handleOverlayUp = () => {
+    if (!dragRef.current) return
+    dragRef.current = null
+    setDraggingHandle(null)
+    setMagnifier(prev => ({ ...prev, show: false }))
+  }
 
   // Load vault documents on mount
   const loadVaultDocs = useCallback(async () => {
@@ -2424,15 +2412,14 @@ function DocScannerPage() {
                   <line x1={`${cc.tl.x * 100}%`} y1={`${(cc.tl.y + cc.bl.y * 2) / 3 * 100}%`} x2={`${cc.tr.x * 100}%`} y2={`${(cc.tr.y + cc.br.y * 2) / 3 * 100}%`} stroke="rgba(255,255,255,0.2)" strokeWidth="0.8" />
                 </svg>
 
-                {/* Corner Handles - CamScanner style L-shaped corners with pointer capture */}
+                {/* Corner Handles - CamScanner style L-shaped corners */}
                 {(['tl', 'tr', 'br', 'bl'] as const).map(corner => {
                   const pos = cc[corner]
-                  const handlers = getCropHandleHandlers(corner)
                   const isActive = draggingHandle === corner
                   return (
                     <div
                       key={corner}
-                      {...handlers}
+                      onPointerDown={(e) => startCropDrag(e, corner)}
                       className="absolute z-20"
                       style={{
                         left: `${pos.x * 100}%`,
@@ -2444,7 +2431,6 @@ function DocScannerPage() {
                         cursor: isActive ? 'grabbing' : 'grab',
                       }}
                     >
-                      {/* L-shaped corner indicators like CamScanner */}
                       <div className="relative" style={{ width: isActive ? 28 : 24, height: isActive ? 28 : 24 }}>
                         {corner === 'tl' && <>
                           <div className="absolute top-0 left-0 rounded-sm" style={{ width: isActive ? 24 : 20, height: 3, backgroundColor: isActive ? '#4ade80' : 'white' }} />
@@ -2467,19 +2453,18 @@ function DocScannerPage() {
                   )
                 })}
 
-                {/* Edge Handles with pointer capture */}
+                {/* Edge Handles */}
                 {[
                   { id: 'top', pos: { x: (cc.tl.x + cc.tr.x) / 2, y: (cc.tl.y + cc.tr.y) / 2 } },
                   { id: 'bottom', pos: { x: (cc.bl.x + cc.br.x) / 2, y: (cc.bl.y + cc.br.y) / 2 } },
                   { id: 'left', pos: { x: (cc.tl.x + cc.bl.x) / 2, y: (cc.tl.y + cc.bl.y) / 2 } },
                   { id: 'right', pos: { x: (cc.tr.x + cc.br.x) / 2, y: (cc.tr.y + cc.br.y) / 2 } },
                 ].map(({ id, pos }) => {
-                  const handlers = getCropHandleHandlers(id)
                   const isActive = draggingHandle === id
                   return (
                     <div
                       key={id}
-                      {...handlers}
+                      onPointerDown={(e) => startCropDrag(e, id)}
                       className="absolute z-20"
                       style={{
                         left: `${pos.x * 100}%`,
@@ -2491,7 +2476,7 @@ function DocScannerPage() {
                         cursor: isActive ? 'grabbing' : 'grab',
                       }}
                     >
-                      <div className={`rounded-sm shadow-lg shadow-black/60 ${id === 'top' || id === 'bottom' ? '' : ''}`} style={{
+                      <div className="rounded-sm shadow-lg shadow-black/60" style={{
                         width: (id === 'top' || id === 'bottom') ? (isActive ? 40 : 32) : 4,
                         height: (id === 'left' || id === 'right') ? (isActive ? 40 : 32) : 4,
                         backgroundColor: isActive ? '#4ade80' : '#34d399',
@@ -2532,7 +2517,6 @@ function DocScannerPage() {
                             const srcY = Math.max(0, Math.min(nh - srcH, magnifier.y * nh - srcH / 2))
                             mCtx.clearRect(0, 0, displaySize, displaySize)
                             mCtx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, displaySize, displaySize)
-                            // Crosshair
                             mCtx.strokeStyle = 'rgba(34,197,94,0.7)'
                             mCtx.lineWidth = 1
                             mCtx.beginPath()
@@ -2547,6 +2531,21 @@ function DocScannerPage() {
                       </div>
                     </div>
                   </div>
+                )}
+
+                {/* ===== DRAG OVERLAY - The key to reliable mobile drag ===== */}
+                {/* When dragging, this invisible overlay covers the entire screen and
+                    captures ALL pointer events. This prevents browser scroll/zoom and
+                    ensures move/up events are never lost. This is the pattern used by
+                    react-image-crop, Cropper.js, and CamScanner web. */}
+                {draggingHandle && (
+                  <div
+                    className="fixed inset-0"
+                    style={{ zIndex: 9999, touchAction: 'none', cursor: 'grabbing' }}
+                    onPointerMove={handleOverlayMove}
+                    onPointerUp={handleOverlayUp}
+                    onPointerCancel={handleOverlayUp}
+                  />
                 )}
               </>
             )}
