@@ -316,8 +316,12 @@ function AppHeader() {
             </button>
           )}
           <div className="relative">
-            <button onClick={() => setShowUserMenu(!showUserMenu)} className="w-8 h-8 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
-              {user?.name?.[0]?.toUpperCase() || 'U'}
+            <button onClick={() => setShowUserMenu(!showUserMenu)} className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium overflow-hidden">
+              {user?.avatar ? (
+                <img src={user.avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
+              ) : (
+                <span className="w-8 h-8 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full flex items-center justify-center text-white text-sm font-medium">{user?.name?.[0]?.toUpperCase() || 'U'}</span>
+              )}
             </button>
             {showUserMenu && (
               <div className="absolute right-0 top-10 w-48 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-border z-50 py-2">
@@ -2096,18 +2100,43 @@ function ProfilePage() {
   const [name, setName] = useState(user?.name || '')
   const [oldPassword, setOldPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatar || null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 2 * 1024 * 1024) {
+      toast({ title: 'File Too Large', description: 'Please select an image under 2MB.', variant: 'destructive' })
+      return
+    }
+    if (!file.type.startsWith('image/')) {
+      toast({ title: 'Invalid File', description: 'Please select an image file.', variant: 'destructive' })
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const result = ev.target?.result as string
+      setAvatarPreview(result)
+    }
+    reader.readAsDataURL(file)
+  }
 
   const updateProfile = async () => {
     try {
       const data = await apiFetch('/auth', {
         method: 'PUT',
-        body: JSON.stringify({ action: 'updateProfile', name })
+        body: JSON.stringify({ action: 'updateProfile', name, avatar: avatarPreview })
       })
       useAppStore.getState().setAuth(data.user, token!)
       toast({ title: 'Profile updated!' })
     } catch (err: unknown) {
       toast({ title: 'Error', description: err instanceof Error ? err.message : 'Failed', variant: 'destructive' })
     }
+  }
+
+  const removeAvatar = () => {
+    setAvatarPreview(null)
   }
 
   const changePassword = async () => {
@@ -2128,9 +2157,34 @@ function ProfilePage() {
     <div className="p-4 pb-24 space-y-4">
       {/* Profile Header */}
       <div className="text-center py-6">
-        <div className="w-24 h-24 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full flex items-center justify-center text-white text-3xl font-bold mx-auto mb-3">
-          {user?.name?.[0]?.toUpperCase() || 'U'}
+        <div className="relative w-28 h-28 mx-auto mb-3">
+          {avatarPreview ? (
+            <img src={avatarPreview} alt="Profile" className="w-28 h-28 rounded-full object-cover border-4 border-emerald-200 shadow-lg" />
+          ) : (
+            <div className="w-28 h-28 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full flex items-center justify-center text-white text-4xl font-bold border-4 border-emerald-200 shadow-lg">
+              {user?.name?.[0]?.toUpperCase() || 'U'}
+            </div>
+          )}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="absolute bottom-0 right-0 w-9 h-9 bg-emerald-500 hover:bg-emerald-600 rounded-full flex items-center justify-center text-white shadow-md border-2 border-white transition-colors"
+            title="Change photo"
+          >
+            <Pencil className="w-4 h-4" />
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleAvatarChange}
+            className="hidden"
+          />
         </div>
+        {avatarPreview && (
+          <button onClick={removeAvatar} className="text-xs text-red-500 hover:text-red-600 mb-1">
+            Remove Photo
+          </button>
+        )}
         <h2 className="text-xl font-bold">{user?.name}</h2>
         <p className="text-muted-foreground">{user?.email}</p>
         {user?.role === 'admin' && <Badge className="mt-2 bg-emerald-100 text-emerald-700">Admin</Badge>}

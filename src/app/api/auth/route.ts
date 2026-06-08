@@ -97,7 +97,7 @@ export async function PUT(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { action, name, oldPassword, newPassword } = body
+    const { action, name, oldPassword, newPassword, avatar } = body
 
     const user = await db.user.findUnique({ where: { id: token } })
     if (!user) {
@@ -107,7 +107,10 @@ export async function PUT(req: NextRequest) {
     if (action === 'updateProfile') {
       const updated = await db.user.update({
         where: { id: token },
-        data: { name: name || user.name }
+        data: {
+          name: name || user.name,
+          ...(avatar !== undefined && { avatar })
+        }
       })
       const { password: _, ...userWithoutPassword } = updated
       return NextResponse.json({ user: userWithoutPassword })
