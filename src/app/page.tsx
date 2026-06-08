@@ -1926,10 +1926,12 @@ function DocScannerPage() {
   // New crop state: 4 corner points as percentages (0-1) of the image
   const [cropCorners, setCropCorners] = useState<{ tl: { x: number; y: number }; tr: { x: number; y: number }; br: { x: number; y: number }; bl: { x: number; y: number } } | null>(null)
   const [draggingHandle, setDraggingHandle] = useState<string | null>(null) // 'tl','tr','br','bl','top','right','bottom','left'
-  const imageContainerRef = React.useRef<HTMLDivElement>(null)
+  const imageRef = React.useRef<HTMLImageElement>(null)
   const [imageNaturalSize, setImageNaturalSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 })
   const [rotation, setRotation] = useState(0) // 0, 90, 180, 270
   const [vaultLoaded, setVaultLoaded] = useState(false)
+  const [magnifier, setMagnifier] = useState<{ x: number; y: number; show: boolean }>({ x: 0, y: 0, show: false })
+  const magnifierCanvasRef = React.useRef<HTMLCanvasElement>(null)
 
   // Load vault documents on mount
   const loadVaultDocs = useCallback(async () => {
@@ -2096,14 +2098,63 @@ function DocScannerPage() {
     e.preventDefault()
     e.stopPropagation()
     setDraggingHandle(handle)
+    setMagnifier(prev => ({ ...prev, show: true }))
   }
 
+  // Get the actual rendered image rect within the container
+  const getImageRect = useCallback(() => {
+    if (!imageRef.current) return null
+    return imageRef.current.getBoundingClientRect()
+  }, [])
+
   const handlePointerMove = useCallback((clientX: number, clientY: number) => {
-    if (!draggingHandle || !cropCorners || !imageContainerRef.current) return
-    const rect = imageContainerRef.current.getBoundingClientRect()
-    // Convert client coords to percentage (0-1) within the image container
-    const px = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
-    const py = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
+    if (!draggingHandle || !cropCorners) return
+    const imgRect = getImageRect()
+    if (!imgRect) return
+
+    // Convert client coords to percentage (0-1) within the ACTUAL image bounds
+    const px = Math.max(0, Math.min(1, (clientX - imgRect.left) / imgRect.width))
+    const py = Math.max(0, Math.min(1, (clientY - imgRect.top) / imgRect.height))
+
+    // Update magnifier position
+    setMagnifier({ x: px, y: py, show: true })
+
+    // Draw magnifier
+    const doc = scannedDocs.find(d => d.id === editingDoc)
+    if (doc && magnifierCanvasRef.current) {
+      const mCanvas = magnifierCanvasRef.current
+      const mCtx = mCanvas.getContext('2d')
+      if (mCtx) {
+        const img = new Image()
+        img.src = getFilteredData(doc)
+        const nw = img.naturalWidth || 800
+        const nh = img.naturalHeight || 600
+        const zoomFactor = 3
+        const lensSize = 120
+        mCanvas.width = lensSize
+        mCanvas.height = lensSize
+        // Source area in natural pixels
+        const srcX = Math.max(0, px * nw - lensSize / zoomFactor / 2)
+        const srcY = Math.max(0, py * nh - lensSize / zoomFactor / 2)
+        const srcW = lensSize / zoomFactor
+        const srcH = lensSize / zoomFactor
+        mCtx.clearRect(0, 0, lensSize, lensSize)
+        mCtx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, lensSize, lensSize)
+        // Draw crosshair
+        mCtx.strokeStyle = '#22c55e'
+        mCtx.lineWidth = 1
+        mCtx.beginPath()
+        mCtx.moveTo(lensSize / 2, 0)
+        mCtx.lineTo(lensSize / 2, lensSize)
+        mCtx.moveTo(0, lensSize / 2)
+        mCtx.lineTo(lensSize, lensSize / 2)
+        mCtx.stroke()
+        // Draw border
+        mCtx.strokeStyle = '#22c55e'
+        mCtx.lineWidth = 3
+        mCtx.strokeRect(1.5, 1.5, lensSize - 3, lensSize - 3)
+      }
+    }
 
     setCropCorners(prev => {
       if (!prev) return prev
@@ -2120,10 +2171,11 @@ function DocScannerPage() {
       }
       return updated
     })
-  }, [draggingHandle, cropCorners])
+  }, [draggingHandle, cropCorners, getImageRect, scannedDocs, editingDoc])
 
   const handlePointerUp = useCallback(() => {
     setDraggingHandle(null)
+    setMagnifier(prev => ({ ...prev, show: false }))
   }, [])
 
   // Global pointer move/up listeners
@@ -2283,8 +2335,8 @@ function DocScannerPage() {
   // ============ EDITOR VIEW ============
   if (editingDoc && editingDocData) {
     const filteredSrc = getFilteredData(editingDocData)
-    // Initialize crop corners when entering crop mode
-    const currentCropCorners = cropCorners || { tl: { x: 0.05, y: 0.05 }, tr: { x: 0.95, y: 0.05 }, br: { x: 0.95, y: 0.95 }, bl: { x: 0.05, y: 0.95 } }
+    const defaultCorners = { tl: { x: 0.05, y: 0.05 }, tr: { x: 0.95, y: 0.05 }, br: { x: 0.95, y: 0.95 }, bl: { x: 0.05, y: 0.95 } }
+    const cc = cropCorners || defaultCorners
 
     return (
       <div className="flex flex-col h-[100dvh] bg-black">
@@ -2303,128 +2355,195 @@ function DocScannerPage() {
           )}
         </div>
 
+        {/* Hidden canvas for magnifier rendering */}
+        <canvas ref={magnifierCanvasRef} className="hidden" />
+
         {/* Main Image Area */}
-        <div className="flex-1 relative flex items-center justify-center overflow-hidden bg-black" ref={imageContainerRef}>
-          {/* Image */}
-          <img
-            src={filteredSrc}
-            alt="Scan"
-            className="w-full h-full object-contain select-none"
-            draggable={false}
-            onLoad={(e) => {
-              const img = e.target as HTMLImageElement
-              setImageNaturalSize({ w: img.naturalWidth, h: img.naturalHeight })
-            }}
-          />
+        <div className="flex-1 relative flex items-center justify-center overflow-hidden bg-black p-2">
+          {/* Image with relative positioning for overlay */}
+          <div className="relative inline-block max-w-full max-h-full" style={{ lineHeight: 0 }}>
+            <img
+              ref={imageRef}
+              src={filteredSrc}
+              alt="Scan"
+              className="max-w-full max-h-[70dvh] select-none"
+              style={{ objectFit: 'contain' }}
+              draggable={false}
+              onLoad={(e) => {
+                const img = e.target as HTMLImageElement
+                setImageNaturalSize({ w: img.naturalWidth, h: img.naturalHeight })
+              }}
+            />
 
-          {/* Crop Overlay */}
-          {cropMode && (
-            <>
-              {/* Dimmed areas - using absolute positioning with clip paths */}
-              {/* Top dim */}
-              <div className="absolute inset-0 pointer-events-none" style={{
-                clipPath: `polygon(
-                  0% 0%, 100% 0%, 100% ${currentCropCorners.tl.y * 100}%, ${currentCropCorners.tl.x * 100}% ${currentCropCorners.tl.y * 100}%, ${currentCropCorners.tl.x * 100}% ${currentCropCorners.bl.y * 100}%, ${currentCropCorners.bl.x * 100}% ${currentCropCorners.bl.y * 100}%, ${currentCropCorners.bl.x * 100}% ${currentCropCorners.tl.y * 100}%, 0% ${currentCropCorners.tl.y * 100}%
-                )`,
-                backgroundColor: 'rgba(0,0,0,0.55)'
-              }} />
-              {/* Bottom dim */}
-              <div className="absolute inset-0 pointer-events-none" style={{
-                clipPath: `polygon(
-                  0% ${currentCropCorners.bl.y * 100}%, ${currentCropCorners.bl.x * 100}% ${currentCropCorners.bl.y * 100}%, ${currentCropCorners.br.x * 100}% ${currentCropCorners.br.y * 100}%, 100% ${currentCropCorners.br.y * 100}%, 100% 100%, 0% 100%
-                )`,
-                backgroundColor: 'rgba(0,0,0,0.55)'
-              }} />
-              {/* Left dim */}
-              <div className="absolute inset-0 pointer-events-none" style={{
-                clipPath: `polygon(
-                  0% ${currentCropCorners.tl.y * 100}%, ${currentCropCorners.tl.x * 100}% ${currentCropCorners.tl.y * 100}%, ${currentCropCorners.bl.x * 100}% ${currentCropCorners.bl.y * 100}%, ${currentCropCorners.bl.x * 100}% ${currentCropCorners.br.y * 100}%, 0% ${currentCropCorners.bl.y * 100}%
-                )`,
-                backgroundColor: 'rgba(0,0,0,0.55)'
-              }} />
-              {/* Right dim */}
-              <div className="absolute inset-0 pointer-events-none" style={{
-                clipPath: `polygon(
-                  ${currentCropCorners.tr.x * 100}% ${currentCropCorners.tr.y * 100}%, 100% ${currentCropCorners.tr.y * 100}%, 100% ${currentCropCorners.br.y * 100}%, ${currentCropCorners.br.x * 100}% ${currentCropCorners.br.y * 100}%
-                )`,
-                backgroundColor: 'rgba(0,0,0,0.55)'
-              }} />
+            {/* Crop Overlay - positioned over the actual image */}
+            {cropMode && (
+              <>
+                {/* Semi-transparent overlay with cutout for crop area */}
+                <div className="absolute inset-0 pointer-events-none" style={{
+                  boxShadow: `${cc.tl.x * 100}% ${cc.tl.y * 100}% 0 ${Math.max(2000, 3000)}px rgba(0,0,0,0.6)`,
+                  clipPath: 'inset(0)',
+                }} />
 
-              {/* Green border lines */}
-              <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 10 }}>
-                <line x1={`${currentCropCorners.tl.x * 100}%`} y1={`${currentCropCorners.tl.y * 100}%`} x2={`${currentCropCorners.tr.x * 100}%`} y2={`${currentCropCorners.tr.y * 100}%`} stroke="#22c55e" strokeWidth="2.5" />
-                <line x1={`${currentCropCorners.tr.x * 100}%`} y1={`${currentCropCorners.tr.y * 100}%`} x2={`${currentCropCorners.br.x * 100}%`} y2={`${currentCropCorners.br.y * 100}%`} stroke="#22c55e" strokeWidth="2.5" />
-                <line x1={`${currentCropCorners.br.x * 100}%`} y1={`${currentCropCorners.br.y * 100}%`} x2={`${currentCropCorners.bl.x * 100}%`} y2={`${currentCropCorners.bl.y * 100}%`} stroke="#22c55e" strokeWidth="2.5" />
-                <line x1={`${currentCropCorners.bl.x * 100}%`} y1={`${currentCropCorners.bl.y * 100}%`} x2={`${currentCropCorners.tl.x * 100}%`} y2={`${currentCropCorners.tl.y * 100}%`} stroke="#22c55e" strokeWidth="2.5" />
-                {/* Grid lines (3x3) */}
-                <line x1={`${(currentCropCorners.tl.x * 2 + currentCropCorners.tr.x) / 3 * 100}%`} y1={`${currentCropCorners.tl.y * 100}%`} x2={`${(currentCropCorners.bl.x * 2 + currentCropCorners.br.x) / 3 * 100}%`} y2={`${currentCropCorners.bl.y * 100}%`} stroke="rgba(255,255,255,0.25)" strokeWidth="0.5" />
-                <line x1={`${(currentCropCorners.tl.x + currentCropCorners.tr.x * 2) / 3 * 100}%`} y1={`${currentCropCorners.tr.y * 100}%`} x2={`${(currentCropCorners.bl.x + currentCropCorners.br.x * 2) / 3 * 100}%`} y2={`${currentCropCorners.br.y * 100}%`} stroke="rgba(255,255,255,0.25)" strokeWidth="0.5" />
-                <line x1={`${currentCropCorners.tl.x * 100}%`} y1={`${(currentCropCorners.tl.y * 2 + currentCropCorners.bl.y) / 3 * 100}%`} x2={`${currentCropCorners.tr.x * 100}%`} y2={`${(currentCropCorners.tr.y * 2 + currentCropCorners.br.y) / 3 * 100}%`} stroke="rgba(255,255,255,0.25)" strokeWidth="0.5" />
-                <line x1={`${currentCropCorners.tl.x * 100}%`} y1={`${(currentCropCorners.tl.y + currentCropCorners.bl.y * 2) / 3 * 100}%`} x2={`${currentCropCorners.tr.x * 100}%`} y2={`${(currentCropCorners.tr.y + currentCropCorners.br.y * 2) / 3 * 100}%`} stroke="rgba(255,255,255,0.25)" strokeWidth="0.5" />
-              </svg>
+                {/* Top dim */}
+                <div className="absolute pointer-events-none bg-black/60" style={{
+                  top: 0, left: 0, right: 0,
+                  height: `${cc.tl.y * 100}%`
+                }} />
+                {/* Bottom dim */}
+                <div className="absolute pointer-events-none bg-black/60" style={{
+                  bottom: 0, left: 0, right: 0,
+                  height: `${(1 - cc.br.y) * 100}%`
+                }} />
+                {/* Left dim */}
+                <div className="absolute pointer-events-none bg-black/60" style={{
+                  top: `${cc.tl.y * 100}%`, bottom: `${(1 - cc.bl.y) * 100}%`, left: 0,
+                  width: `${cc.tl.x * 100}%`
+                }} />
+                {/* Right dim */}
+                <div className="absolute pointer-events-none bg-black/60" style={{
+                  top: `${cc.tr.y * 100}%`, bottom: `${(1 - cc.br.y) * 100}%`, right: 0,
+                  width: `${(1 - cc.tr.x) * 100}%`
+                }} />
 
-              {/* Corner Handles (circles) */}
-              {(['tl', 'tr', 'br', 'bl'] as const).map(corner => {
-                const pos = currentCropCorners[corner]
-                return (
+                {/* Green border lines using SVG */}
+                <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 10 }}>
+                  <line x1={`${cc.tl.x * 100}%`} y1={`${cc.tl.y * 100}%`} x2={`${cc.tr.x * 100}%`} y2={`${cc.tr.y * 100}%`} stroke="#22c55e" strokeWidth="2.5" />
+                  <line x1={`${cc.tr.x * 100}%`} y1={`${cc.tr.y * 100}%`} x2={`${cc.br.x * 100}%`} y2={`${cc.br.y * 100}%`} stroke="#22c55e" strokeWidth="2.5" />
+                  <line x1={`${cc.br.x * 100}%`} y1={`${cc.br.y * 100}%`} x2={`${cc.bl.x * 100}%`} y2={`${cc.bl.y * 100}%`} stroke="#22c55e" strokeWidth="2.5" />
+                  <line x1={`${cc.bl.x * 100}%`} y1={`${cc.bl.y * 100}%`} x2={`${cc.tl.x * 100}%`} y2={`${cc.tl.y * 100}%`} stroke="#22c55e" strokeWidth="2.5" />
+                  {/* 3x3 Grid lines */}
+                  <line x1={`${(cc.tl.x * 2 + cc.tr.x) / 3 * 100}%`} y1={`${cc.tl.y * 100}%`} x2={`${(cc.bl.x * 2 + cc.br.x) / 3 * 100}%`} y2={`${cc.bl.y * 100}%`} stroke="rgba(255,255,255,0.2)" strokeWidth="0.8" />
+                  <line x1={`${(cc.tl.x + cc.tr.x * 2) / 3 * 100}%`} y1={`${cc.tr.y * 100}%`} x2={`${(cc.bl.x + cc.br.x * 2) / 3 * 100}%`} y2={`${cc.br.y * 100}%`} stroke="rgba(255,255,255,0.2)" strokeWidth="0.8" />
+                  <line x1={`${cc.tl.x * 100}%`} y1={`${(cc.tl.y * 2 + cc.bl.y) / 3 * 100}%`} x2={`${cc.tr.x * 100}%`} y2={`${(cc.tr.y * 2 + cc.br.y) / 3 * 100}%`} stroke="rgba(255,255,255,0.2)" strokeWidth="0.8" />
+                  <line x1={`${cc.tl.x * 100}%`} y1={`${(cc.tl.y + cc.bl.y * 2) / 3 * 100}%`} x2={`${cc.tr.x * 100}%`} y2={`${(cc.tr.y + cc.br.y * 2) / 3 * 100}%`} stroke="rgba(255,255,255,0.2)" strokeWidth="0.8" />
+                </svg>
+
+                {/* Corner Handles - larger touch targets */}
+                {(['tl', 'tr', 'br', 'bl'] as const).map(corner => {
+                  const pos = cc[corner]
+                  return (
+                    <button
+                      key={corner}
+                      onPointerDown={(e) => handleCropMouseDown(e, corner)}
+                      className="absolute z-20 touch-none"
+                      style={{
+                        left: `${pos.x * 100}%`,
+                        top: `${pos.y * 100}%`,
+                        transform: 'translate(-50%, -50%)',
+                        width: 40, height: 40,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                      }}
+                    >
+                      <div className="w-6 h-6 rounded-full bg-emerald-500 border-[2.5px] border-white shadow-lg shadow-black/50" />
+                    </button>
+                  )
+                })}
+
+                {/* Edge Handles */}
+                {[
+                  { id: 'top', pos: { x: (cc.tl.x + cc.tr.x) / 2, y: (cc.tl.y + cc.tr.y) / 2 } },
+                  { id: 'bottom', pos: { x: (cc.bl.x + cc.br.x) / 2, y: (cc.bl.y + cc.br.y) / 2 } },
+                  { id: 'left', pos: { x: (cc.tl.x + cc.bl.x) / 2, y: (cc.tl.y + cc.bl.y) / 2 } },
+                  { id: 'right', pos: { x: (cc.tr.x + cc.br.x) / 2, y: (cc.tr.y + cc.br.y) / 2 } },
+                ].map(({ id, pos }) => (
                   <button
-                    key={corner}
-                    onPointerDown={(e) => handleCropMouseDown(e, corner)}
-                    className="absolute z-20 w-8 h-8 -ml-4 -mt-4 flex items-center justify-center touch-none"
-                    style={{ left: `${pos.x * 100}%`, top: `${pos.y * 100}%` }}
+                    key={id}
+                    onPointerDown={(e) => handleCropMouseDown(e, id)}
+                    className="absolute z-20 touch-none"
+                    style={{
+                      left: `${pos.x * 100}%`,
+                      top: `${pos.y * 100}%`,
+                      transform: 'translate(-50%, -50%)',
+                      width: 36, height: 36,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}
                   >
-                    <div className="w-5 h-5 rounded-full bg-emerald-500 border-2 border-white shadow-lg shadow-black/30" />
+                    <div className="w-4 h-4 bg-emerald-500 border-2 border-white shadow-lg shadow-black/50 rounded-[2px]" />
                   </button>
-                )
-              })}
+                ))}
 
-              {/* Edge Handles (squares) */}
-              {[
-                { id: 'top', pos: { x: (currentCropCorners.tl.x + currentCropCorners.tr.x) / 2, y: (currentCropCorners.tl.y + currentCropCorners.tr.y) / 2 } },
-                { id: 'bottom', pos: { x: (currentCropCorners.bl.x + currentCropCorners.br.x) / 2, y: (currentCropCorners.bl.y + currentCropCorners.br.y) / 2 } },
-                { id: 'left', pos: { x: (currentCropCorners.tl.x + currentCropCorners.bl.x) / 2, y: (currentCropCorners.tl.y + currentCropCorners.bl.y) / 2 } },
-                { id: 'right', pos: { x: (currentCropCorners.tr.x + currentCropCorners.br.x) / 2, y: (currentCropCorners.tr.y + currentCropCorners.br.y) / 2 } },
-              ].map(({ id, pos }) => (
-                <button
-                  key={id}
-                  onPointerDown={(e) => handleCropMouseDown(e, id)}
-                  className="absolute z-20 w-8 h-8 -ml-4 -mt-4 flex items-center justify-center touch-none"
-                  style={{ left: `${pos.x * 100}%`, top: `${pos.y * 100}%` }}
-                >
-                  <div className={`w-4 h-4 bg-emerald-500 border-2 border-white shadow-lg shadow-black/30 ${id === 'top' || id === 'bottom' ? 'rounded-sm' : 'rounded-sm'}`} />
-                </button>
-              ))}
-            </>
-          )}
+                {/* Magnifier / Zoom Lens */}
+                {magnifier.show && draggingHandle && (
+                  <div
+                    className="absolute z-30 pointer-events-none"
+                    style={{
+                      left: `${Math.min(magnifier.x * 100 + 8, 70)}%`,
+                      top: `${Math.max(magnifier.y * 100 - 35, 5)}%`,
+                    }}
+                  >
+                    <div className="relative">
+                      <canvas
+                        width={120}
+                        height={120}
+                        className="rounded-xl border-2 border-emerald-400 shadow-xl shadow-black/50"
+                        style={{ width: 100, height: 100 }}
+                        ref={(el) => {
+                          if (el && editingDocData) {
+                            const mCtx = el.getContext('2d')
+                            if (mCtx) {
+                              const img = new Image()
+                              img.src = filteredSrc
+                              const nw = imageNaturalSize.w || 800
+                              const nh = imageNaturalSize.h || 600
+                              const zoomFactor = 3.5
+                              const displaySize = 120
+                              const srcX = Math.max(0, magnifier.x * nw - displaySize / zoomFactor / 2)
+                              const srcY = Math.max(0, magnifier.y * nh - displaySize / zoomFactor / 2)
+                              const srcW = displaySize / zoomFactor
+                              const srcH = displaySize / zoomFactor
+                              mCtx.clearRect(0, 0, displaySize, displaySize)
+                              mCtx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, displaySize, displaySize)
+                              // Crosshair
+                              mCtx.strokeStyle = '#22c55e'
+                              mCtx.lineWidth = 1
+                              mCtx.beginPath()
+                              mCtx.moveTo(displaySize / 2, 0)
+                              mCtx.lineTo(displaySize / 2, displaySize)
+                              mCtx.moveTo(0, displaySize / 2)
+                              mCtx.lineTo(displaySize, displaySize / 2)
+                              mCtx.stroke()
+                            }
+                          }
+                        }}
+                      />
+                      <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[9px] text-emerald-400 bg-black/70 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                        3.5x {language === 'bn' ? 'জুম' : 'zoom'}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </div>
 
         {/* Bottom Toolbar */}
         {cropMode ? (
-          <div className="flex items-center justify-around px-6 py-4 bg-emerald-700 shrink-0">
-            <button onClick={resetCrop} className="flex flex-col items-center gap-1 text-white/80 hover:text-white">
+          <div className="flex items-center justify-around px-4 py-4 bg-emerald-700 shrink-0 safe-bottom">
+            <button onClick={resetCrop} className="flex flex-col items-center gap-1 text-white/80 hover:text-white active:scale-95 transition-transform">
               <Grid3X3 className="w-5 h-5" />
               <span className="text-[10px]">{language === 'bn' ? 'রিসেট' : 'Reset'}</span>
             </button>
-            <button onClick={applyCrop} className="flex flex-col items-center gap-1 text-white/80 hover:text-white">
+            <button onClick={applyCrop} className="flex flex-col items-center gap-1 text-white/80 hover:text-white active:scale-95 transition-transform">
               <FileEdit className="w-5 h-5" />
               <span className="text-[10px]">{language === 'bn' ? 'ক্রপ' : 'Crop'}</span>
             </button>
-            <button onClick={() => rotateImage(90)} className="flex flex-col items-center gap-1 text-white/80 hover:text-white">
+            <button onClick={() => rotateImage(90)} className="flex flex-col items-center gap-1 text-white/80 hover:text-white active:scale-95 transition-transform">
               <RefreshCw className="w-5 h-5" />
               <span className="text-[10px]">{language === 'bn' ? 'ঘোরান' : 'Rotate'}</span>
             </button>
-            <button onClick={() => rotateImage(-90)} className="flex flex-col items-center gap-1 text-white/80 hover:text-white">
+            <button onClick={() => rotateImage(-90)} className="flex flex-col items-center gap-1 text-white/80 hover:text-white active:scale-95 transition-transform">
               <RefreshCw className="w-5 h-5 transform -scale-x-100" />
               <span className="text-[10px]">{language === 'bn' ? 'উল্টো' : 'Rev'}</span>
             </button>
-            <button onClick={applyCrop} className="flex flex-col items-center gap-1 text-white">
-              <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center">
+            <button onClick={applyCrop} className="flex flex-col items-center gap-1 text-white active:scale-95 transition-transform">
+              <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center shadow-lg">
                 <CheckCircle className="w-6 h-6 text-emerald-600" />
               </div>
             </button>
           </div>
         ) : (
-          <div className="bg-gray-900 shrink-0">
+          <div className="bg-gray-900 shrink-0 safe-bottom">
             {/* Filter bar */}
             <div className="px-4 py-3">
               <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
@@ -2444,7 +2563,7 @@ function DocScannerPage() {
             {/* Action buttons */}
             <div className="flex items-center gap-2 px-4 pb-4 pt-1">
               <Button
-                onClick={() => { setCropMode(true); setCropCorners({ tl: { x: 0.05, y: 0.05 }, tr: { x: 0.95, y: 0.05 }, br: { x: 0.95, y: 0.95 }, bl: { x: 0.05, y: 0.95 } }) }}
+                onClick={() => { setCropMode(true); setCropCorners({ ...defaultCorners }) }}
                 className="flex-1 bg-emerald-600 hover:bg-emerald-700"
               >
                 <FileEdit className="w-4 h-4 mr-1" /> {language === 'bn' ? 'ক্রপ' : 'Crop'}
