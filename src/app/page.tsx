@@ -1,7 +1,8 @@
 'use client'
 
-import React, { useEffect, useState, useCallback, useRef } from 'react'
+import React, { useEffect, useState, useCallback, useRef, useMemo, memo } from 'react'
 import { useAppStore, Page } from '@/lib/store'
+import { useShallow } from 'zustand/react/shallow'
 import apiFetch from '@/lib/api'
 import { translations, TranslationKey, Lang } from '@/lib/i18n'
 import { Button } from '@/components/ui/button'
@@ -84,8 +85,9 @@ function getCurrentMonth(): string {
 }
 
 // ============ AUTH PAGES ============
-function LoginPage() {
-  const { setAuth, setPage } = useAppStore()
+const LoginPage = memo(function LoginPage() {
+  const setAuth = useAppStore(state => state.setAuth)
+  const setPage = useAppStore(state => state.setPage)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -96,7 +98,7 @@ function LoginPage() {
     setLoading(true)
     setError('')
     try {
-      const data = await apiFetch('/auth', {
+      const data = await apiFetch<any>('/auth', {
         method: 'POST',
         body: JSON.stringify({ action: 'login', email, password })
       })
@@ -149,10 +151,11 @@ function LoginPage() {
       </div>
     </div>
   )
-}
+})
 
-function RegisterPage() {
-  const { setAuth, setPage } = useAppStore()
+const RegisterPage = memo(function RegisterPage() {
+  const setAuth = useAppStore(state => state.setAuth)
+  const setPage = useAppStore(state => state.setPage)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -164,7 +167,7 @@ function RegisterPage() {
     setLoading(true)
     setError('')
     try {
-      const data = await apiFetch('/auth', {
+      const data = await apiFetch<any>('/auth', {
         method: 'POST',
         body: JSON.stringify({ action: 'register', name, email, password })
       })
@@ -217,10 +220,10 @@ function RegisterPage() {
       </div>
     </div>
   )
-}
+})
 
-function ForgotPasswordPage() {
-  const { setPage } = useAppStore()
+const ForgotPasswordPage = memo(function ForgotPasswordPage() {
+  const setPage = useAppStore(state => state.setPage)
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -276,16 +279,24 @@ function ForgotPasswordPage() {
       </div>
     </div>
   )
-}
+})
 
 // ============ HEADER ============
-function AppHeader() {
-  const { currentPage, setPage, toggleSidebar, user, logout, language, setLanguage } = useAppStore()
+const AppHeader = memo(function AppHeader() {
+  const { currentPage, setPage, toggleSidebar, user, logout, language, setLanguage } = useAppStore(useShallow(state => ({
+    currentPage: state.currentPage,
+    setPage: state.setPage,
+    toggleSidebar: state.toggleSidebar,
+    user: state.user,
+    logout: state.logout,
+    language: state.language,
+    setLanguage: state.setLanguage,
+  })))
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
   const [notifications, setNotifications] = useState<Array<{ id: string; title: string; message: string; read: boolean; createdAt: string }>>([])
   const [unreadCount, setUnreadCount] = useState(0)
-  const { token } = useAppStore()
+  const token = useAppStore(state => state.token)
 
   const t = (key: TranslationKey): string => translations[language][key] || translations['en'][key] || key
 
@@ -306,7 +317,7 @@ function AppHeader() {
   const fetchNotifications = useCallback(async () => {
     if (!token) return
     try {
-      const data = await apiFetch('/notifications', {
+      const data = await apiFetch<any>('/notifications', {
         headers: { Authorization: `Bearer ${token}` }
       })
       setNotifications(data.notifications || [])
@@ -427,11 +438,18 @@ function AppHeader() {
       </div>
     </header>
   )
-}
+})
 
 // ============ SIDEBAR / DRAWER ============
-function Sidebar() {
-  const { sidebarOpen, toggleSidebar, currentPage, setPage, user, logout } = useAppStore()
+const Sidebar = memo(function Sidebar() {
+  const { sidebarOpen, toggleSidebar, currentPage, setPage, user, logout } = useAppStore(useShallow(state => ({
+    sidebarOpen: state.sidebarOpen,
+    toggleSidebar: state.toggleSidebar,
+    currentPage: state.currentPage,
+    setPage: state.setPage,
+    user: state.user,
+    logout: state.logout,
+  })))
 
   const menuItems: { icon: React.ReactNode; label: string; page: Page }[] = [
     { icon: <Home className="w-5 h-5" />, label: 'Dashboard', page: 'dashboard' },
@@ -497,11 +515,14 @@ function Sidebar() {
       </div>
     </>
   )
-}
+})
 
 // ============ BOTTOM NAV ============
-function BottomNav() {
-  const { currentPage, setPage } = useAppStore()
+const BottomNav = memo(function BottomNav() {
+  const { currentPage, setPage } = useAppStore(useShallow(state => ({
+    currentPage: state.currentPage,
+    setPage: state.setPage,
+  })))
 
   const tabs = [
     { icon: <Home className="w-5 h-5" />, label: 'Home', page: 'dashboard' as Page },
@@ -538,11 +559,20 @@ function BottomNav() {
       </div>
     </nav>
   )
-}
+})
 
 // ============ DASHBOARD ============
-function DashboardPage() {
-  const { setPage, expenses, receivables, payables, loans, accounts, user, language } = useAppStore()
+const DashboardPage = memo(function DashboardPage() {
+  const { setPage, expenses, receivables, payables, loans, accounts, user, language } = useAppStore(useShallow(state => ({
+    setPage: state.setPage,
+    expenses: state.expenses,
+    receivables: state.receivables,
+    payables: state.payables,
+    loans: state.loans,
+    accounts: state.accounts,
+    user: state.user,
+    language: state.language,
+  })))
   const [loading, setLoading] = useState(true)
 
   const t = (key: TranslationKey): string => translations[language][key] || translations['en'][key] || key
@@ -561,8 +591,8 @@ function DashboardPage() {
       setLoading(true)
       try {
         const [exp, rec, pay, loan, acc] = await Promise.all([
-          apiFetch('/expenses'), apiFetch('/receivables'),
-          apiFetch('/payables'), apiFetch('/loans'), apiFetch('/accounts')
+          apiFetch<any>('/expenses'), apiFetch<any>('/receivables'),
+          apiFetch<any>('/payables'), apiFetch<any>('/loans'), apiFetch<any>('/accounts')
         ])
         useAppStore.getState().setExpenses(exp.expenses)
         useAppStore.getState().setReceivables(rec.receivables)
@@ -575,11 +605,11 @@ function DashboardPage() {
     fetchDashboard()
   }, [])
 
-  const totalExpenses = (expenses as Expense[]).reduce((s, e) => s + e.amount, 0)
-  const totalReceivables = (receivables as Receivable[]).filter(r => r.status === 'pending').reduce((s, r) => s + r.amount, 0)
-  const totalPayables = (payables as Payable[]).filter(p => p.status === 'pending').reduce((s, p) => s + p.amount, 0)
-  const totalLoanRemaining = (loans as Loan[]).filter(l => l.status === 'active').reduce((s, l) => s + (l.totalAmount - l.paidAmount), 0)
-  const totalBalance = (accounts as Account[]).reduce((s, a) => s + a.balance, 0)
+  const totalExpenses = useMemo(() => (expenses as Expense[]).reduce((s, e) => s + e.amount, 0), [expenses])
+  const totalReceivables = useMemo(() => (receivables as Receivable[]).filter(r => r.status === 'pending').reduce((s, r) => s + r.amount, 0), [receivables])
+  const totalPayables = useMemo(() => (payables as Payable[]).filter(p => p.status === 'pending').reduce((s, p) => s + p.amount, 0), [payables])
+  const totalLoanRemaining = useMemo(() => (loans as Loan[]).filter(l => l.status === 'active').reduce((s, l) => s + (l.totalAmount - l.paidAmount), 0), [loans])
+  const totalBalance = useMemo(() => (accounts as Account[]).reduce((s, a) => s + a.balance, 0), [accounts])
 
   const quickActions = [
     { icon: <DollarSign className="w-5 h-5" />, label: 'Expenses', page: 'expenses' as Page, color: 'from-orange-400 to-red-400' },
@@ -722,11 +752,14 @@ function DashboardPage() {
       )}
     </div>
   )
-}
+})
 
 // ============ EXPENSES PAGE ============
-function ExpensesPage() {
-  const { expenses, setExpenses } = useAppStore()
+const ExpensesPage = memo(function ExpensesPage() {
+  const { expenses, setExpenses } = useAppStore(useShallow(state => ({
+    expenses: state.expenses,
+    setExpenses: state.setExpenses,
+  })))
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Expense | null>(null)
   const [form, setForm] = useState({ title: '', amount: '', category: 'Food & Dining', date: getToday(), note: '' })
@@ -734,7 +767,7 @@ function ExpensesPage() {
 
   const loadExpenses = async () => {
     try {
-      const data = await apiFetch(`/expenses${filter !== 'all' ? `?category=${filter}` : ''}`)
+      const data = await apiFetch<any>(`/expenses${filter !== 'all' ? `?category=${filter}` : ''}`)
       setExpenses(data.expenses)
     } catch { /* */ }
   }
@@ -775,11 +808,14 @@ function ExpensesPage() {
     } catch { /* */ }
   }
 
-  const total = (expenses as Expense[]).reduce((s, e) => s + e.amount, 0)
+  const total = useMemo(() => (expenses as Expense[]).reduce((s, e) => s + e.amount, 0), [expenses])
 
   // Category breakdown
-  const categoryTotals: Record<string, number> = {}
-  ;(expenses as Expense[]).forEach(e => { categoryTotals[e.category] = (categoryTotals[e.category] || 0) + e.amount })
+  const categoryTotals = useMemo(() => {
+    const totals: Record<string, number> = {}
+    ;(expenses as Expense[]).forEach(e => { totals[e.category] = (totals[e.category] || 0) + e.amount })
+    return totals
+  }, [expenses])
 
   return (
     <div className="p-4 pb-24 space-y-4">
@@ -879,16 +915,19 @@ function ExpensesPage() {
       </div>
     </div>
   )
-}
+})
 
 // ============ RECEIVABLES PAGE ============
-function ReceivablesPage() {
-  const { receivables, setReceivables } = useAppStore()
+const ReceivablesPage = memo(function ReceivablesPage() {
+  const { receivables, setReceivables } = useAppStore(useShallow(state => ({
+    receivables: state.receivables,
+    setReceivables: state.setReceivables,
+  })))
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ title: '', amount: '', fromPerson: '', dueDate: '', note: '' })
 
   const load = async () => {
-    try { const d = await apiFetch('/receivables'); setReceivables(d.receivables) } catch { /* */ }
+    try { const d = await apiFetch<any>('/receivables'); setReceivables(d.receivables) } catch { /* */ }
   }
   useEffect(() => { load() }, [])
 
@@ -918,7 +957,7 @@ function ReceivablesPage() {
     try { await apiFetch(`/receivables?id=${id}`, { method: 'DELETE' }); load() } catch { /* */ }
   }
 
-  const total = (receivables as Receivable[]).filter(r => r.status === 'pending').reduce((s, r) => s + r.amount, 0)
+  const total = useMemo(() => (receivables as Receivable[]).filter(r => r.status === 'pending').reduce((s, r) => s + r.amount, 0), [receivables])
 
   return (
     <div className="p-4 pb-24 space-y-4">
@@ -973,16 +1012,19 @@ function ReceivablesPage() {
       </div>
     </div>
   )
-}
+})
 
 // ============ PAYABLES PAGE ============
-function PayablesPage() {
-  const { payables, setPayables } = useAppStore()
+const PayablesPage = memo(function PayablesPage() {
+  const { payables, setPayables } = useAppStore(useShallow(state => ({
+    payables: state.payables,
+    setPayables: state.setPayables,
+  })))
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ title: '', amount: '', toPerson: '', dueDate: '', note: '' })
 
   const load = async () => {
-    try { const d = await apiFetch('/payables'); setPayables(d.payables) } catch { /* */ }
+    try { const d = await apiFetch<any>('/payables'); setPayables(d.payables) } catch { /* */ }
   }
   useEffect(() => { load() }, [])
 
@@ -1012,7 +1054,7 @@ function PayablesPage() {
     try { await apiFetch(`/payables?id=${id}`, { method: 'DELETE' }); load() } catch { /* */ }
   }
 
-  const total = (payables as Payable[]).filter(p => p.status === 'pending').reduce((s, p) => s + p.amount, 0)
+  const total = useMemo(() => (payables as Payable[]).filter(p => p.status === 'pending').reduce((s, p) => s + p.amount, 0), [payables])
 
   return (
     <div className="p-4 pb-24 space-y-4">
@@ -1067,16 +1109,19 @@ function PayablesPage() {
       </div>
     </div>
   )
-}
+})
 
 // ============ LOANS PAGE ============
-function LoansPage() {
-  const { loans, setLoans } = useAppStore()
+const LoansPage = memo(function LoansPage() {
+  const { loans, setLoans } = useAppStore(useShallow(state => ({
+    loans: state.loans,
+    setLoans: state.setLoans,
+  })))
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ title: '', totalAmount: '', emiAmount: '', interestRate: '', tenure: '', startDate: getToday(), endDate: '', note: '' })
 
   const load = async () => {
-    try { const d = await apiFetch('/loans'); setLoans(d.loans) } catch { /* */ }
+    try { const d = await apiFetch<any>('/loans'); setLoans(d.loans) } catch { /* */ }
   }
   useEffect(() => { load() }, [])
 
@@ -1108,7 +1153,7 @@ function LoansPage() {
     try { await apiFetch(`/loans?id=${id}`, { method: 'DELETE' }); load() } catch { /* */ }
   }
 
-  const totalRemaining = (loans as Loan[]).filter(l => l.status === 'active').reduce((s, l) => s + (l.totalAmount - l.paidAmount), 0)
+  const totalRemaining = useMemo(() => (loans as Loan[]).filter(l => l.status === 'active').reduce((s, l) => s + (l.totalAmount - l.paidAmount), 0), [loans])
 
   return (
     <div className="p-4 pb-24 space-y-4">
@@ -1183,16 +1228,19 @@ function LoansPage() {
       </div>
     </div>
   )
-}
+})
 
 // ============ ACCOUNTS PAGE ============
-function AccountsPage() {
-  const { accounts, setAccounts } = useAppStore()
+const AccountsPage = memo(function AccountsPage() {
+  const { accounts, setAccounts } = useAppStore(useShallow(state => ({
+    accounts: state.accounts,
+    setAccounts: state.setAccounts,
+  })))
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ name: '', type: 'Bank Account', balance: '', note: '' })
 
   const load = async () => {
-    try { const d = await apiFetch('/accounts'); setAccounts(d.accounts) } catch { /* */ }
+    try { const d = await apiFetch<any>('/accounts'); setAccounts(d.accounts) } catch { /* */ }
   }
   useEffect(() => { load() }, [])
 
@@ -1214,7 +1262,7 @@ function AccountsPage() {
     try { await apiFetch(`/accounts?id=${id}`, { method: 'DELETE' }); load() } catch { /* */ }
   }
 
-  const totalBalance = (accounts as Account[]).reduce((s, a) => s + a.balance, 0)
+  const totalBalance = useMemo(() => (accounts as Account[]).reduce((s, a) => s + a.balance, 0), [accounts])
 
   const typeIcons: Record<string, React.ReactNode> = {
     'Bank Account': <Landmark className="w-5 h-5" />,
@@ -1276,7 +1324,7 @@ function AccountsPage() {
       </div>
     </div>
   )
-}
+})
 
 // Helper icon components
 function SmartphoneIcon({ className }: { className?: string }) { return <div className={className}>📱</div> }
@@ -1284,13 +1332,16 @@ function CreditCardIcon({ className }: { className?: string }) { return <div cla
 function PiggyBankIcon({ className }: { className?: string }) { return <div className={className}>🐷</div> }
 
 // ============ TOMORROW'S PLAN ============
-function PlansPage() {
-  const { plans, setPlans } = useAppStore()
+const PlansPage = memo(function PlansPage() {
+  const { plans, setPlans } = useAppStore(useShallow(state => ({
+    plans: state.plans,
+    setPlans: state.setPlans,
+  })))
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ title: '', description: '', date: getTomorrow(), time: '', priority: 'medium' })
 
   const load = async () => {
-    try { const d = await apiFetch('/plans'); setPlans(d.plans) } catch { /* */ }
+    try { const d = await apiFetch<any>('/plans'); setPlans(d.plans) } catch { /* */ }
   }
   useEffect(() => { load() }, [])
 
@@ -1380,17 +1431,20 @@ function PlansPage() {
       </div>
     </div>
   )
-}
+})
 
 // ============ NOTES PAGE ============
-function NotesPage() {
-  const { notes, setNotes } = useAppStore()
+const NotesPage = memo(function NotesPage() {
+  const { notes, setNotes } = useAppStore(useShallow(state => ({
+    notes: state.notes,
+    setNotes: state.setNotes,
+  })))
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Note | null>(null)
   const [form, setForm] = useState({ title: '', content: '', color: '#ffffff', pinned: false })
 
   const load = async () => {
-    try { const d = await apiFetch('/notes'); setNotes(d.notes) } catch { /* */ }
+    try { const d = await apiFetch<any>('/notes'); setNotes(d.notes) } catch { /* */ }
   }
   useEffect(() => { load() }, [])
 
@@ -1484,11 +1538,11 @@ function NotesPage() {
       </div>
     </div>
   )
-}
+})
 
 // ============ NOTE COUNTER ============
-function NoteCounterPage() {
-  const { language } = useAppStore()
+const NoteCounterPage = memo(function NoteCounterPage() {
+  const language = useAppStore(state => state.language)
   const [counts, setCounts] = useState<Record<string, number>>({
     '500': 0, '200': 0, '100': 0, '50': 0, '20': 0, '10': 0, '5': 0, '2': 0, '1': 0
   })
@@ -2138,7 +2192,7 @@ function NoteCounterPage() {
       )}
     </div>
   )
-}
+})
 
 // ============ DOC SCANNER ============
 type ScanFilter = 'original' | 'bw' | 'grayscale' | 'photo' | 'sepia'
@@ -2153,8 +2207,12 @@ interface ScanDoc {
   category?: string
 }
 
-function DocScannerPage() {
-  const { language, documents, setDocuments } = useAppStore()
+const DocScannerPage = memo(function DocScannerPage() {
+  const { language, documents, setDocuments } = useAppStore(useShallow(state => ({
+    language: state.language,
+    documents: state.documents,
+    setDocuments: state.setDocuments,
+  })))
   const t = translations[language]
   const [scanning, setScanning] = useState(false)
   const [scannedDocs, setScannedDocs] = useState<ScanDoc[]>([])
@@ -2452,7 +2510,7 @@ function DocScannerPage() {
   // Load vault documents on mount
   const loadVaultDocs = useCallback(async () => {
     try {
-      const d = await apiFetch('/documents')
+      const d = await apiFetch<any>('/documents')
       setDocuments(d.documents)
       setVaultLoaded(true)
     } catch { /* */ }
@@ -3574,11 +3632,16 @@ function DocScannerPage() {
       </Tabs>
     </div>
   )
-}
+})
 
 // ============ DOCVAULT ============
-function DocVaultPage() {
-  const { documents, setDocuments, setPage, language } = useAppStore()
+const DocVaultPage = memo(function DocVaultPage() {
+  const { documents, setDocuments, setPage, language } = useAppStore(useShallow(state => ({
+    documents: state.documents,
+    setDocuments: state.setDocuments,
+    setPage: state.setPage,
+    language: state.language,
+  })))
   const t = translations[language]
   const [showUpload, setShowUpload] = useState(false)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
@@ -3587,7 +3650,7 @@ function DocVaultPage() {
   const [searchQuery, setSearchQuery] = useState('')
 
   const load = async () => {
-    try { const d = await apiFetch('/documents'); setDocuments(d.documents) } catch { /* */ }
+    try { const d = await apiFetch<any>('/documents'); setDocuments(d.documents) } catch { /* */ }
   }
   useEffect(() => { load() }, [])
 
@@ -3872,11 +3935,11 @@ function DocVaultPage() {
       )}
     </div>
   )
-}
+})
 
 // ============ CALCULATOR ============
-function CalculatorPage() {
-  const { language } = useAppStore()
+const CalculatorPage = memo(function CalculatorPage() {
+  const language = useAppStore(state => state.language)
   const [display, setDisplay] = useState('0')
   const [previousValue, setPreviousValue] = useState<string | null>(null)
   const [operation, setOperation] = useState<string | null>(null)
@@ -4057,12 +4120,12 @@ function CalculatorPage() {
       </div>
     </div>
   )
-}
+})
 
 // ============ CALENDAR ============
-function CalendarPage() {
+const CalendarPage = memo(function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date())
-  const { plans } = useAppStore()
+  const plans = useAppStore(state => state.plans)
   const [selectedDate, setSelectedDate] = useState(getToday())
 
   const year = currentDate.getFullYear()
@@ -4135,16 +4198,19 @@ function CalendarPage() {
       )}
     </div>
   )
-}
+})
 
 // ============ ALARM ============
-function AlarmPage() {
-  const { alarms, setAlarms } = useAppStore()
+const AlarmPage = memo(function AlarmPage() {
+  const { alarms, setAlarms } = useAppStore(useShallow(state => ({
+    alarms: state.alarms,
+    setAlarms: state.setAlarms,
+  })))
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ title: '', time: '07:00', date: '', repeat: 'once' })
 
   const load = async () => {
-    try { const d = await apiFetch('/alarms'); setAlarms(d.alarms) } catch { /* */ }
+    try { const d = await apiFetch<any>('/alarms'); setAlarms(d.alarms) } catch { /* */ }
   }
   useEffect(() => { load() }, [])
 
@@ -4228,11 +4294,11 @@ function AlarmPage() {
       </div>
     </div>
   )
-}
+})
 
 // ============ TOOLS PAGE ============
-function ToolsPage() {
-  const { setPage } = useAppStore()
+const ToolsPage = memo(function ToolsPage() {
+  const setPage = useAppStore(state => state.setPage)
   const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [converting, setConverting] = useState(false)
   const [convertedImages, setConvertedImages] = useState<string[]>([])
@@ -4565,11 +4631,17 @@ function ToolsPage() {
       </Card>
     </div>
   )
-}
+})
 
 // ============ PROFILE PAGE ============
-function ProfilePage() {
-  const { user, token, logout, setPage, language } = useAppStore()
+const ProfilePage = memo(function ProfilePage() {
+  const { user, token, logout, setPage, language } = useAppStore(useShallow(state => ({
+    user: state.user,
+    token: state.token,
+    logout: state.logout,
+    setPage: state.setPage,
+    language: state.language,
+  })))
   const [name, setName] = useState(user?.name || '')
   const [oldPassword, setOldPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -4597,7 +4669,7 @@ function ProfilePage() {
 
   const updateProfile = async () => {
     try {
-      const data = await apiFetch('/auth', {
+      const data = await apiFetch<any>('/auth', {
         method: 'PUT',
         body: JSON.stringify({ action: 'updateProfile', name, avatar: avatarPreview })
       })
@@ -4728,11 +4800,15 @@ function ProfilePage() {
       </Button>
     </div>
   )
-}
+})
 
 // ============ ADMIN PANEL ============
-function AdminPage() {
-  const { setPage, user, token } = useAppStore()
+const AdminPage = memo(function AdminPage() {
+  const { setPage, user, token } = useAppStore(useShallow(state => ({
+    setPage: state.setPage,
+    user: state.user,
+    token: state.token,
+  })))
   const [stats, setStats] = useState<Record<string, number>>({})
   const [users, setUsers] = useState<UserInfo[]>([])
   const [selectedUser, setSelectedUser] = useState<UserInfo | null>(null)
@@ -4745,13 +4821,13 @@ function AdminPage() {
     if (user?.role !== 'admin') return
     const loadStats = async () => {
       try {
-        const d = await apiFetch('/admin?action=stats')
+        const d = await apiFetch<any>('/admin?action=stats')
         setStats(d.stats)
       } catch { /* */ }
     }
     const loadUsers = async () => {
       try {
-        const d = await apiFetch('/admin?action=users')
+        const d = await apiFetch<any>('/admin?action=users')
         setUsers(d.users)
       } catch { /* */ }
     }
@@ -4761,7 +4837,7 @@ function AdminPage() {
 
   const viewUserDetail = async (u: UserInfo) => {
     try {
-      const d = await apiFetch(`/admin?action=userDetail&userId=${u.id}`)
+      const d = await apiFetch<any>(`/admin?action=userDetail&userId=${u.id}`)
       setUserDetail(d)
       setSelectedUser(u)
     } catch { /* */ }
@@ -4771,7 +4847,7 @@ function AdminPage() {
     try {
       await apiFetch('/admin', { method: 'PUT', body: JSON.stringify({ action: 'updateRole', userId, role }) })
       toast({ title: 'Role updated' })
-      const d = await apiFetch('/admin?action=users')
+      const d = await apiFetch<any>('/admin?action=users')
       setUsers(d.users)
     } catch { /* */ }
   }
@@ -4781,7 +4857,7 @@ function AdminPage() {
     try {
       await apiFetch(`/admin?userId=${userId}`, { method: 'DELETE' })
       toast({ title: 'User deleted' })
-      const d = await apiFetch('/admin?action=users')
+      const d = await apiFetch<any>('/admin?action=users')
       setUsers(d.users)
     } catch { /* */ }
   }
@@ -4942,11 +5018,19 @@ function AdminPage() {
       )}
     </div>
   )
-}
+})
 
 // ============ MAIN APP ============
 export default function DailyLifeApp() {
-  const { isAuthenticated, currentPage, token, setAuth, logout, language, setLanguage } = useAppStore()
+  const { isAuthenticated, currentPage, token, setAuth, logout, language, setLanguage } = useAppStore(useShallow(state => ({
+    isAuthenticated: state.isAuthenticated,
+    currentPage: state.currentPage,
+    token: state.token,
+    setAuth: state.setAuth,
+    logout: state.logout,
+    language: state.language,
+    setLanguage: state.setLanguage,
+  })))
   const [initialized, setInitialized] = useState(false)
 
   // Translation function
@@ -4959,7 +5043,7 @@ export default function DailyLifeApp() {
     const checkAuth = async () => {
       if (token) {
         try {
-          const data = await apiFetch('/auth', {
+          const data = await apiFetch<any>('/auth', {
             method: 'POST',
             body: JSON.stringify({ action: 'verify' }),
             headers: { Authorization: `Bearer ${token}` }
