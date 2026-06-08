@@ -1564,10 +1564,6 @@ const NoteCounterPage = memo(function NoteCounterPage() {
   const [personName, setPersonName] = useState('')
   const [mobileNumber, setMobileNumber] = useState('')
   const [accountNumber, setAccountNumber] = useState('')
-  const [onlineAmount, setOnlineAmount] = useState(0)
-  const [otherPlus, setOtherPlus] = useState(0)
-  const [otherMinus, setOtherMinus] = useState(0)
-
   // Amount to Payable/Receivable - tally calculator
   const [targetAmount, setTargetAmount] = useState<string>('')
   const [targetMode, setTargetMode] = useState<'payable' | 'receivable'>('payable')
@@ -1598,7 +1594,6 @@ const NoteCounterPage = memo(function NoteCounterPage() {
 
   const total = denominations.reduce((sum, d) => sum + (d.value * (counts[String(d.value)] || 0)), 0)
   const totalNotes = Object.values(counts).reduce((s, c) => s + c, 0)
-  const grandTotal = total + onlineAmount + otherPlus - otherMinus
 
   useEffect(() => {
     try {
@@ -1618,7 +1613,7 @@ const NoteCounterPage = memo(function NoteCounterPage() {
   }
 
   const handleSave = (entryType: 'in' | 'out') => {
-    if (total === 0 && onlineAmount === 0 && otherPlus === 0 && otherMinus === 0) {
+    if (total === 0) {
       toast({ title: language === 'bn' ? 'খালি কাউন্ট' : 'Empty Count', description: language === 'bn' ? 'সেভ করার আগে কিছু নোট কাউন্ট করুন।' : 'Count some notes first before saving.', variant: 'destructive' })
       return
     }
@@ -1626,7 +1621,7 @@ const NoteCounterPage = memo(function NoteCounterPage() {
       id: Date.now().toString(),
       date: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
       counts: { ...counts },
-      total: grandTotal,
+      total: total,
       category,
       remark,
       personName,
@@ -1637,7 +1632,7 @@ const NoteCounterPage = memo(function NoteCounterPage() {
     const updated = [newEntry, ...savedCounts].slice(0, 50)
     setSavedCounts(updated)
     localStorage.setItem('noteCounterSaved', JSON.stringify(updated))
-    toast({ title: language === 'bn' ? `সেভ হয়েছে! (${entryType === 'in' ? 'ইন' : 'আউট'})` : `Saved! (${entryType === 'in' ? 'In' : 'Out'})`, description: language === 'bn' ? `${formatCurrency(grandTotal)} সফলভাবে সেভ হয়েছে` : `Cash count of ${formatCurrency(grandTotal)} saved successfully.` })
+    toast({ title: language === 'bn' ? `সেভ হয়েছে! (${entryType === 'in' ? 'ইন' : 'আউট'})` : `Saved! (${entryType === 'in' ? 'In' : 'Out'})`, description: language === 'bn' ? `${formatCurrency(total)} সফলভাবে সেভ হয়েছে` : `Cash count of ${formatCurrency(total)} saved successfully.` })
   }
 
   const handleDelete = (id: string) => {
@@ -1648,7 +1643,7 @@ const NoteCounterPage = memo(function NoteCounterPage() {
   }
 
   const handleShare = () => {
-    if (total === 0 && onlineAmount === 0 && otherPlus === 0 && otherMinus === 0) {
+    if (total === 0) {
       toast({ title: language === 'bn' ? 'খালি কাউন্ট' : 'Empty Count', description: language === 'bn' ? 'শেয়ার করার আগে কিছু নোট কাউন্ট করুন।' : 'Count some notes first before sharing.', variant: 'destructive' })
       return
     }
@@ -1658,13 +1653,9 @@ const NoteCounterPage = memo(function NoteCounterPage() {
       const c = counts[String(d.value)] || 0
       if (c > 0) text += `${d.label} × ${c} = ${formatCurrency(d.value * c)}\n`
     })
-    if (onlineAmount > 0) text += `📱 Online: ${formatCurrency(onlineAmount)}\n`
-    if (otherPlus > 0) text += `➕ Other+: ${formatCurrency(otherPlus)}\n`
-    if (otherMinus > 0) text += `➖ Other-: ${formatCurrency(otherMinus)}\n`
     text += `━━━━━━━━━━━━━━━━━━\n`
     text += `📝 Total Notes: ${totalNotes}\n`
-    text += `💵 Total Cash: ${formatCurrency(total)}\n`
-    text += `💰 Grand Total: ${formatCurrency(grandTotal)}`
+    text += `💵 Total Cash: ${formatCurrency(total)}`
     if (category) text += `\n📂 Category: ${category}`
     if (remark) text += `\n📝 Remark: ${remark}`
     if (personName) text += `\n👤 Person: ${personName}`
@@ -1757,19 +1748,19 @@ const NoteCounterPage = memo(function NoteCounterPage() {
   const sendTotalToCalc = () => {
     const newEntry = {
       id: Date.now().toString(),
-      expression: `${language === 'bn' ? 'নোট কাউন্ট থেকে' : 'From Note Count'} → ${formatCurrency(grandTotal)}`,
-      result: String(grandTotal),
+      expression: `${language === 'bn' ? 'নোট কাউন্ট থেকে' : 'From Note Count'} → ${formatCurrency(total)}`,
+      result: String(total),
       date: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
       fromNoteCount: true as const,
     }
     saveCalcHistory([newEntry, ...calcHistory])
-    setCalcDisplay(String(grandTotal))
+    setCalcDisplay(String(total))
     setCalcPrevious(null)
     setCalcOperation(null)
     setCalcExpression('')
     setCalcReset(true)
     setShowCalc(true)
-    toast({ title: language === 'bn' ? 'ক্যালকুলেটরে পাঠানো হয়েছে!' : 'Sent to Calculator!', description: language === 'bn' ? `${formatCurrency(grandTotal)} ক্যালকুলেটরে ট্রান্সফার হয়েছে` : `${formatCurrency(grandTotal)} transferred to calculator.` })
+    toast({ title: language === 'bn' ? 'ক্যালকুলেটরে পাঠানো হয়েছে!' : 'Sent to Calculator!', description: language === 'bn' ? `${formatCurrency(total)} ক্যালকুলেটরে ট্রান্সফার হয়েছে` : `${formatCurrency(total)} transferred to calculator.` })
   }
 
   const clearCalcHistory = () => {
@@ -1806,13 +1797,10 @@ const NoteCounterPage = memo(function NoteCounterPage() {
 
   // Calculate Payable/Receivable difference
   const targetNum = parseInt(targetAmount) || 0
-  const tallyDiff = targetNum > 0 ? grandTotal - targetNum : 0
+  const tallyDiff = targetNum > 0 ? total - targetNum : 0
 
   const resetAll = () => {
     setCounts({ ...resetCounts })
-    setOnlineAmount(0)
-    setOtherPlus(0)
-    setOtherMinus(0)
     setCategory('')
     setRemark('')
     setPersonName('')
@@ -1842,7 +1830,7 @@ const NoteCounterPage = memo(function NoteCounterPage() {
           </div>
           <div className="bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
             <span className="text-yellow-600 dark:text-yellow-500 text-xs font-bold">₹</span>
-            <span className="text-yellow-500 dark:text-yellow-400 font-bold text-lg">{grandTotal.toLocaleString('en-IN')}</span>
+            <span className="text-yellow-500 dark:text-yellow-400 font-bold text-lg">{total.toLocaleString('en-IN')}</span>
           </div>
         </div>
       </div>
@@ -1907,7 +1895,7 @@ const NoteCounterPage = memo(function NoteCounterPage() {
                   <div className="text-muted-foreground text-lg font-bold">VS</div>
                   <div className="flex-1 bg-white dark:bg-gray-900 rounded-lg p-2 text-center border border-border">
                     <p className="text-muted-foreground text-[10px] mb-0.5">{language === 'bn' ? 'কাউন্ট হয়েছে' : 'Counted'}</p>
-                    <p className="text-foreground text-base font-bold">{formatCurrency(grandTotal)}</p>
+                    <p className="text-foreground text-base font-bold">{formatCurrency(total)}</p>
                   </div>
                 </div>
 
@@ -1997,46 +1985,6 @@ const NoteCounterPage = memo(function NoteCounterPage() {
         })}
       </div>
 
-      {/* ===== ONLINE AMOUNT ===== */}
-      <div className="px-3 pt-3">
-        <div className="bg-white dark:bg-gray-900 rounded-lg border border-border p-3">
-          <div className="flex items-center gap-2 mb-2">
-            <Smartphone className="w-4 h-4 text-blue-500 dark:text-blue-400" />
-            <span className="text-muted-foreground text-sm font-medium">{language === 'bn' ? 'অনলাইন অ্যামাউন্ট' : 'Online Amount'}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setOnlineAmount(Math.max(0, onlineAmount - 100))} className="w-7 h-7 rounded-full bg-red-100 dark:bg-red-900/60 text-red-600 dark:text-red-400 flex items-center justify-center text-sm font-bold active:scale-90 transition-transform border border-red-200 dark:border-red-700/40">−</button>
-            <input type="number" value={onlineAmount || ''} placeholder="0" onChange={e => setOnlineAmount(parseInt(e.target.value) || 0)} className="flex-1 h-8 text-center bg-gray-100 dark:bg-gray-800 text-foreground text-sm font-medium rounded border border-border focus:border-blue-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" min={0} />
-            <button onClick={() => setOnlineAmount(onlineAmount + 100)} className="w-7 h-7 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-sm font-bold active:scale-90 transition-transform border border-emerald-200 dark:border-emerald-700/40">+</button>
-            <span className="text-blue-500 dark:text-blue-400 text-sm font-bold w-20 text-right">{onlineAmount > 0 ? formatCurrency(onlineAmount) : ''}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* ===== OTHER PLUS / MINUS ===== */}
-      <div className="px-3 pt-2 flex gap-2">
-        <div className="flex-1 bg-white dark:bg-gray-900 rounded-lg border border-border p-2.5">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-emerald-600 dark:text-emerald-400 text-xs font-medium">{language === 'bn' ? 'অন্যান্য +' : 'Other + ₹'}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <button onClick={() => setOtherPlus(Math.max(0, otherPlus - 50))} className="w-6 h-6 rounded-full bg-red-100 dark:bg-red-900/60 text-red-600 dark:text-red-400 flex items-center justify-center text-xs font-bold active:scale-90 transition-transform border border-red-200 dark:border-red-700/40">−</button>
-            <input type="number" value={otherPlus || ''} placeholder="0" onChange={e => setOtherPlus(parseInt(e.target.value) || 0)} className="flex-1 h-7 text-center bg-gray-100 dark:bg-gray-800 text-foreground text-xs font-medium rounded border border-border focus:border-emerald-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" min={0} />
-            <button onClick={() => setOtherPlus(otherPlus + 50)} className="w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xs font-bold active:scale-90 transition-transform border border-emerald-200 dark:border-emerald-700/40">+</button>
-          </div>
-        </div>
-        <div className="flex-1 bg-white dark:bg-gray-900 rounded-lg border border-border p-2.5">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-red-600 dark:text-red-400 text-xs font-medium">{language === 'bn' ? 'অন্যান্য −' : 'Other − ₹'}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <button onClick={() => setOtherMinus(Math.max(0, otherMinus - 50))} className="w-6 h-6 rounded-full bg-red-100 dark:bg-red-900/60 text-red-600 dark:text-red-400 flex items-center justify-center text-xs font-bold active:scale-90 transition-transform border border-red-200 dark:border-red-700/40">−</button>
-            <input type="number" value={otherMinus || ''} placeholder="0" onChange={e => setOtherMinus(parseInt(e.target.value) || 0)} className="flex-1 h-7 text-center bg-gray-100 dark:bg-gray-800 text-foreground text-xs font-medium rounded border border-border focus:border-red-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" min={0} />
-            <button onClick={() => setOtherMinus(otherMinus + 50)} className="w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xs font-bold active:scale-90 transition-transform border border-emerald-200 dark:border-emerald-700/40">+</button>
-          </div>
-        </div>
-      </div>
-
       {/* ===== ENTRY DETAILS ===== */}
       <div className="px-3 pt-2">
         <div className="bg-white dark:bg-gray-900 rounded-lg border border-border p-3 space-y-2">
@@ -2059,11 +2007,11 @@ const NoteCounterPage = memo(function NoteCounterPage() {
         <div className="bg-gradient-to-r from-amber-600 to-yellow-500 rounded-lg p-3 flex items-center justify-between">
           <div>
             <p className="text-amber-100 text-xs">{language === 'bn' ? 'গ্র্যান্ড টোটাল' : 'GRAND TOTAL'}</p>
-            <p className="text-white text-2xl font-bold">{formatCurrency(grandTotal)}</p>
+            <p className="text-white text-2xl font-bold">{formatCurrency(total)}</p>
           </div>
           <div className="text-right">
-            <p className="text-amber-100 text-xs">{language === 'bn' ? 'নোট + অনলাইন + অন্যান্য' : 'Cash + Online + Other'}</p>
-            <p className="text-white/80 text-xs">{formatCurrency(total)} + {formatCurrency(onlineAmount)} + {formatCurrency(otherPlus)} − {formatCurrency(otherMinus)}</p>
+            <p className="text-amber-100 text-xs">{language === 'bn' ? 'মোট নোট টাকা' : 'Total Cash'}</p>
+            <p className="text-white/80 text-xs">{formatCurrency(total)}</p>
           </div>
         </div>
       </div>
