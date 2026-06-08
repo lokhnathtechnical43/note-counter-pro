@@ -149,6 +149,13 @@ export const translations = {
 
     // Calculator
     clear: 'Clear',
+    calcHistory: 'History',
+    noCalcHistory: 'No calculations yet',
+    clearHistory: 'Clear History',
+    sendToCalc: 'Send to Calculator',
+    openCalc: 'Open Calculator',
+    closeCalc: 'Close',
+    fromNoteCount: 'From Note Count',
 
     // Calendar
     today: 'Today',
@@ -382,6 +389,13 @@ export const translations = {
 
     // Calculator
     clear: 'ক্লিয়ার',
+    calcHistory: 'ইতিহাস',
+    noCalcHistory: 'এখনও কোনো ক্যালকুলেশন নেই',
+    clearHistory: 'ইতিহাস মুছুন',
+    sendToCalc: 'ক্যালকুলেটরে পাঠান',
+    openCalc: 'ক্যালকুলেটর খুলুন',
+    closeCalc: 'বন্ধ করুন',
+    fromNoteCount: 'নোট কাউন্ট থেকে',
 
     // Calendar
     today: 'আজ',

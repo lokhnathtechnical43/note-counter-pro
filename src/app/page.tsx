@@ -26,7 +26,7 @@ import {
   AlertCircle, FileText, Search, Moon, Sun, Download, Upload, Pencil,
   ChevronRight, MoreVertical, Star, StarOff, RefreshCw, Activity,
   PieChart, BarChart3, Users, Settings, HelpCircle, Info, ArrowRight,
-  Hash, IndianRupee, Scan, FileImage, FileEdit, FileType, Pause, Play, Grid3X3, List
+  Hash, IndianRupee, Scan, FileImage, FileEdit, FileType, Pause, Play, Grid3X3, List, History
 } from 'lucide-react'
 
 // ============ TYPES ============
@@ -1488,12 +1488,17 @@ function NoteCounterPage() {
   const [savedCounts, setSavedCounts] = useState<Array<{ id: string; date: string; counts: Record<string, number>; total: number }>>([])
   const [showSaved, setShowSaved] = useState(false)
   const [showCalc, setShowCalc] = useState(false)
+  const [showCalcHistory, setShowCalcHistory] = useState(false)
 
   // Calculator state
   const [calcDisplay, setCalcDisplay] = useState('0')
   const [calcPrevious, setCalcPrevious] = useState<string | null>(null)
   const [calcOperation, setCalcOperation] = useState<string | null>(null)
   const [calcReset, setCalcReset] = useState(false)
+  const [calcExpression, setCalcExpression] = useState('')
+
+  // Calculator history
+  const [calcHistory, setCalcHistory] = useState<Array<{ id: string; expression: string; result: string; date: string; fromNoteCount?: boolean }>>([])
 
   const denominations = [
     { value: 500, label: '₹500', labelBn: '৳৫০০', color: 'from-orange-400 to-orange-500' },
@@ -1512,13 +1517,23 @@ function NoteCounterPage() {
   const total = denominations.reduce((sum, d) => sum + (d.value * (counts[String(d.value)] || 0)), 0)
   const totalNotes = Object.values(counts).reduce((s, c) => s + c, 0)
 
-  // Load saved counts from localStorage
+  // Load saved counts and calc history from localStorage
   useEffect(() => {
     try {
       const saved = localStorage.getItem('noteCounterSaved')
       if (saved) setSavedCounts(JSON.parse(saved))
     } catch {}
+    try {
+      const hist = localStorage.getItem('noteCounterCalcHistory')
+      if (hist) setCalcHistory(JSON.parse(hist))
+    } catch {}
   }, [])
+
+  const saveCalcHistory = (history: Array<{ id: string; expression: string; result: string; date: string; fromNoteCount?: boolean }>) => {
+    const trimmed = history.slice(0, 100)
+    setCalcHistory(trimmed)
+    localStorage.setItem('noteCounterCalcHistory', JSON.stringify(trimmed))
+  }
 
   const handleSave = () => {
     if (total === 0) {
@@ -1592,13 +1607,14 @@ function NoteCounterPage() {
   }
 
   const calcHandleOperation = (op: string) => {
-    if (calcPrevious && calcOperation && !calcReset) { calcCalculate() }
+    if (calcPrevious && calcOperation && !calcReset) { calcCalculate(false) }
+    setCalcExpression(formatCurrency(parseFloat(calcDisplay)) + ' ' + op)
     setCalcPrevious(calcDisplay)
     setCalcOperation(op)
     setCalcReset(true)
   }
 
-  const calcCalculate = () => {
+  const calcCalculate = (addToHistory = true) => {
     if (!calcPrevious || !calcOperation) return
     const prev = parseFloat(calcPrevious)
     const curr = parseFloat(calcDisplay)
@@ -1609,27 +1625,75 @@ function NoteCounterPage() {
       case '×': result = prev * curr; break
       case '÷': result = curr !== 0 ? prev / curr : 0; break
     }
-    setCalcDisplay(String(result))
+    const resultStr = String(Math.round(result * 100000000) / 100000000)
+    const expressionStr = `${formatCurrency(prev)} ${calcOperation} ${formatCurrency(curr)} = ${formatCurrency(result)}`
+
+    if (addToHistory) {
+      const newEntry = {
+        id: Date.now().toString(),
+        expression: expressionStr,
+        result: resultStr,
+        date: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+      }
+      saveCalcHistory([newEntry, ...calcHistory])
+    }
+
+    setCalcDisplay(resultStr)
+    setCalcExpression('')
     setCalcPrevious(null)
     setCalcOperation(null)
     setCalcReset(true)
   }
 
-  const calcClear = () => { setCalcDisplay('0'); setCalcPrevious(null); setCalcOperation(null) }
+  const calcClear = () => { setCalcDisplay('0'); setCalcPrevious(null); setCalcOperation(null); setCalcExpression('') }
   const calcPercent = () => setCalcDisplay(String(parseFloat(calcDisplay) / 100))
   const calcToggleSign = () => setCalcDisplay(String(-parseFloat(calcDisplay)))
   const calcDecimal = () => { if (!calcDisplay.includes('.')) setCalcDisplay(calcDisplay + '.') }
 
+  const calcBackspace = () => {
+    if (calcReset) return
+    if (calcDisplay.length <= 1 || (calcDisplay.length === 2 && calcDisplay.startsWith('-'))) {
+      setCalcDisplay('0')
+    } else {
+      setCalcDisplay(calcDisplay.slice(0, -1))
+    }
+  }
+
   const sendTotalToCalc = () => {
+    // Save note count total to history as a marker
+    const newEntry = {
+      id: Date.now().toString(),
+      expression: `${language === 'bn' ? 'নোট কাউন্ট থেকে' : 'From Note Count'} → ${formatCurrency(total)}`,
+      result: String(total),
+      date: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+      fromNoteCount: true as const,
+    }
+    saveCalcHistory([newEntry, ...calcHistory])
+
     setCalcDisplay(String(total))
     setCalcPrevious(null)
     setCalcOperation(null)
+    setCalcExpression('')
     setCalcReset(true)
     setShowCalc(true)
+    toast({ title: language === 'bn' ? 'ক্যালকুলেটরে পাঠানো হয়েছে!' : 'Sent to Calculator!', description: language === 'bn' ? `${formatCurrency(total)} ক্যালকুলেটরে ট্রান্সফার হয়েছে` : `${formatCurrency(total)} transferred to calculator.` })
+  }
+
+  const clearCalcHistory = () => {
+    saveCalcHistory([])
+    toast({ title: language === 'bn' ? 'ইতিহাস মুছে ফেলা হয়েছে' : 'History Cleared', description: language === 'bn' ? 'সব ক্যালকুলেশন ইতিহাস মুছে ফেলা হয়েছে' : 'All calculation history has been cleared.' })
+  }
+
+  const useHistoryResult = (result: string) => {
+    setCalcDisplay(result)
+    setCalcPrevious(null)
+    setCalcOperation(null)
+    setCalcExpression('')
+    setCalcReset(true)
   }
 
   const calcButtons = [
-    ['C', '+/-', '%', '÷'],
+    ['C', '⌫', '%', '÷'],
     ['7', '8', '9', '×'],
     ['4', '5', '6', '-'],
     ['1', '2', '3', '+'],
@@ -1644,6 +1708,7 @@ function NoteCounterPage() {
     else if (val === '+/-') calcToggleSign()
     else if (val === '%') calcPercent()
     else if (val === '.') calcDecimal()
+    else if (val === '⌫') calcBackspace()
   }
 
   return (
@@ -1670,25 +1735,64 @@ function NoteCounterPage() {
               <Calculator className="w-4 h-4 text-emerald-400" />
               <span className="text-gray-300 text-sm font-medium">{language === 'bn' ? 'ক্যালকুলেটর' : 'Calculator'}</span>
             </div>
-            <button onClick={() => setShowCalc(false)} className="text-gray-400 hover:text-white p-1">
-              <X className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setShowCalcHistory(!showCalcHistory)} className={`text-gray-400 hover:text-white p-1 transition-colors ${showCalcHistory ? 'text-emerald-400' : ''}`} title={language === 'bn' ? 'ইতিহাস' : 'History'}>
+                <History className="w-4 h-4" />
+              </button>
+              <button onClick={() => setShowCalc(false)} className="text-gray-400 hover:text-white p-1">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-          <div className="bg-gray-900 p-4 pt-0">
+
+          {/* Calculation History */}
+          {showCalcHistory && (
+            <div className="bg-gray-800 border-t border-gray-700 max-h-48 overflow-y-auto">
+              <div className="flex items-center justify-between p-2 px-3 sticky top-0 bg-gray-800 z-10">
+                <span className="text-gray-400 text-xs font-medium">{language === 'bn' ? 'ইতিহাস' : 'History'} ({calcHistory.length})</span>
+                {calcHistory.length > 0 && (
+                  <button onClick={clearCalcHistory} className="text-red-400 hover:text-red-300 text-xs">{language === 'bn' ? 'মুছুন' : 'Clear'}</button>
+                )}
+              </div>
+              {calcHistory.length === 0 ? (
+                <p className="text-gray-500 text-xs text-center py-4">{language === 'bn' ? 'এখনও কোনো ক্যালকুলেশন নেই' : 'No calculations yet'}</p>
+              ) : (
+                <div className="space-y-1 px-2 pb-2">
+                  {calcHistory.map(entry => (
+                    <button key={entry.id} onClick={() => useHistoryResult(entry.result)}
+                      className="w-full text-right p-2 rounded-lg hover:bg-gray-700 transition-colors group">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1">
+                          {entry.fromNoteCount && <span className="text-[10px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full">{language === 'bn' ? 'নোট' : 'Note'}</span>}
+                        </div>
+                        <p className="text-gray-500 text-[10px]">{entry.date}</p>
+                      </div>
+                      <p className="text-gray-400 text-xs">{entry.expression}</p>
+                      <p className="text-emerald-400 text-sm font-medium group-hover:text-emerald-300">= {formatCurrency(parseFloat(entry.result))}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="bg-gray-900 p-4 pt-3">
             <div className="text-right mb-4 p-3 bg-gray-800 rounded-xl">
-              {calcOperation && calcPrevious && <p className="text-gray-400 text-sm h-5">{formatCurrency(parseFloat(calcPrevious))} {calcOperation}</p>}
-              <p className="text-white text-3xl font-light">{calcDisplay.includes('.') ? calcDisplay : formatCurrency(parseFloat(calcDisplay))}</p>
+              {calcExpression && <p className="text-gray-400 text-sm h-5 truncate">{calcExpression}</p>}
+              {!calcExpression && calcOperation && calcPrevious && <p className="text-gray-400 text-sm h-5 truncate">{formatCurrency(parseFloat(calcPrevious))} {calcOperation}</p>}
+              <p className="text-white text-3xl font-light truncate">{calcDisplay.includes('.') ? calcDisplay : formatCurrency(parseFloat(calcDisplay))}</p>
             </div>
             <div className="grid grid-cols-4 gap-2">
               {calcButtons.map((row, ri) => (
                 row.map((btn, ci) => {
                   const isOp = ['+', '-', '×', '÷', '='].includes(btn)
-                  const isFunc = ['C', '+/-', '%'].includes(btn)
+                  const isFunc = ['C', '⌫', '%'].includes(btn)
+                  const isActiveOp = calcOperation === btn && calcReset
                   return (
                     <button key={`${ri}-${ci}`} onClick={() => calcHandleButton(btn)}
                       className={`h-12 rounded-xl text-lg font-medium transition-all active:scale-95
                         ${btn === '0' ? 'col-span-2' : ''}
-                        ${isOp ? 'bg-emerald-500 text-white hover:bg-emerald-600' : isFunc ? 'bg-gray-600 text-white hover:bg-gray-500' : 'bg-gray-700 text-white hover:bg-gray-600'}`}>
+                        ${isOp ? (isActiveOp ? 'bg-emerald-300 text-gray-900' : 'bg-emerald-500 text-white hover:bg-emerald-600') : isFunc ? 'bg-gray-600 text-white hover:bg-gray-500' : 'bg-gray-700 text-white hover:bg-gray-600'}`}>
                       {btn}
                     </button>
                   )
@@ -1701,9 +1805,16 @@ function NoteCounterPage() {
 
       {/* Calculator toggle when hidden */}
       {!showCalc && (
-        <Button variant="outline" className="w-full" onClick={() => setShowCalc(true)}>
-          <Calculator className="w-4 h-4 mr-2" /> {language === 'bn' ? 'ক্যালকুলেটর খুলুন' : 'Open Calculator'}
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" className="flex-1" onClick={() => setShowCalc(true)}>
+            <Calculator className="w-4 h-4 mr-2" /> {language === 'bn' ? 'ক্যালকুলেটর খুলুন' : 'Open Calculator'}
+          </Button>
+          {total > 0 && (
+            <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={sendTotalToCalc}>
+              <ArrowRight className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
       )}
 
       <div className="space-y-2">
@@ -1755,7 +1866,17 @@ function NoteCounterPage() {
                     <p className="text-xs text-gray-500">{entry.date}</p>
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={() => { setCalcDisplay(String(entry.total)); setCalcReset(true); setShowCalc(true) }} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg" title={language === 'bn' ? 'ক্যালকুলেটরে পাঠান' : 'Send to Calculator'}>
+                    <button onClick={() => {
+                      const newHistEntry = {
+                        id: Date.now().toString(),
+                        expression: `${language === 'bn' ? 'নোট কাউন্ট থেকে' : 'From Note Count'} → ${formatCurrency(entry.total)}`,
+                        result: String(entry.total),
+                        date: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+                        fromNoteCount: true as const,
+                      }
+                      saveCalcHistory([newHistEntry, ...calcHistory])
+                      setCalcDisplay(String(entry.total)); setCalcReset(true); setShowCalc(true)
+                    }} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg" title={language === 'bn' ? 'ক্যালকুলেটরে পাঠান' : 'Send to Calculator'}>
                       <Calculator className="w-4 h-4" />
                     </button>
                     <button onClick={() => handleShareSaved(entry)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Share">
@@ -2825,10 +2946,28 @@ function DocVaultPage() {
 
 // ============ CALCULATOR ============
 function CalculatorPage() {
+  const { language } = useAppStore()
   const [display, setDisplay] = useState('0')
   const [previousValue, setPreviousValue] = useState<string | null>(null)
   const [operation, setOperation] = useState<string | null>(null)
   const [resetDisplay, setResetDisplay] = useState(false)
+  const [expression, setExpression] = useState('')
+  const [showHistory, setShowHistory] = useState(false)
+  const [calcHistory, setCalcHistory] = useState<Array<{ id: string; expression: string; result: string; date: string }>>([])
+
+  // Load history from localStorage
+  useEffect(() => {
+    try {
+      const hist = localStorage.getItem('calculatorHistory')
+      if (hist) setCalcHistory(JSON.parse(hist))
+    } catch {}
+  }, [])
+
+  const saveHistory = (history: Array<{ id: string; expression: string; result: string; date: string }>) => {
+    const trimmed = history.slice(0, 100)
+    setCalcHistory(trimmed)
+    localStorage.setItem('calculatorHistory', JSON.stringify(trimmed))
+  }
 
   const handleNumber = (num: string) => {
     if (resetDisplay) { setDisplay(num); setResetDisplay(false) }
@@ -2836,13 +2975,14 @@ function CalculatorPage() {
   }
 
   const handleOperation = (op: string) => {
-    if (previousValue && operation && !resetDisplay) { calculate() }
+    if (previousValue && operation && !resetDisplay) { calculate(false) }
+    setExpression(formatCurrency(parseFloat(display)) + ' ' + op)
     setPreviousValue(display)
     setOperation(op)
     setResetDisplay(true)
   }
 
-  const calculate = () => {
+  const calculate = (addToHistory = true) => {
     if (!previousValue || !operation) return
     const prev = parseFloat(previousValue)
     const curr = parseFloat(display)
@@ -2853,19 +2993,54 @@ function CalculatorPage() {
       case '×': result = prev * curr; break
       case '÷': result = curr !== 0 ? prev / curr : 0; break
     }
-    setDisplay(String(result))
+    const resultStr = String(Math.round(result * 100000000) / 100000000)
+    const expressionStr = `${formatCurrency(prev)} ${operation} ${formatCurrency(curr)} = ${formatCurrency(result)}`
+
+    if (addToHistory) {
+      const newEntry = {
+        id: Date.now().toString(),
+        expression: expressionStr,
+        result: resultStr,
+        date: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+      }
+      saveHistory([newEntry, ...calcHistory])
+    }
+
+    setDisplay(resultStr)
+    setExpression('')
     setPreviousValue(null)
     setOperation(null)
     setResetDisplay(true)
   }
 
-  const handleClear = () => { setDisplay('0'); setPreviousValue(null); setOperation(null) }
+  const handleClear = () => { setDisplay('0'); setPreviousValue(null); setOperation(null); setExpression('') }
   const handlePercent = () => setDisplay(String(parseFloat(display) / 100))
   const handleToggleSign = () => setDisplay(String(-parseFloat(display)))
   const handleDecimal = () => { if (!display.includes('.')) setDisplay(display + '.') }
+  const handleBackspace = () => {
+    if (resetDisplay) return
+    if (display.length <= 1 || (display.length === 2 && display.startsWith('-'))) {
+      setDisplay('0')
+    } else {
+      setDisplay(display.slice(0, -1))
+    }
+  }
+
+  const clearHistory = () => {
+    saveHistory([])
+    toast({ title: language === 'bn' ? 'ইতিহাস মুছে ফেলা হয়েছে' : 'History Cleared', description: language === 'bn' ? 'সব ক্যালকুলেশন ইতিহাস মুছে ফেলা হয়েছে' : 'All calculation history has been cleared.' })
+  }
+
+  const useHistoryResult = (result: string) => {
+    setDisplay(result)
+    setPreviousValue(null)
+    setOperation(null)
+    setExpression('')
+    setResetDisplay(true)
+  }
 
   const buttons = [
-    ['C', '+/-', '%', '÷'],
+    ['C', '⌫', '%', '÷'],
     ['7', '8', '9', '×'],
     ['4', '5', '6', '-'],
     ['1', '2', '3', '+'],
@@ -2880,30 +3055,74 @@ function CalculatorPage() {
     else if (val === '+/-') handleToggleSign()
     else if (val === '%') handlePercent()
     else if (val === '.') handleDecimal()
+    else if (val === '⌫') handleBackspace()
   }
 
   return (
     <div className="p-4 pb-24 space-y-4">
-      <div className="bg-gray-900 rounded-2xl p-6 shadow-xl">
-        <div className="text-right mb-6">
-          {operation && previousValue && <p className="text-gray-400 text-sm">{previousValue} {operation}</p>}
-          <p className="text-white text-4xl font-light">{display}</p>
+      <div className="bg-gray-900 rounded-2xl shadow-xl overflow-hidden">
+        {/* Header with history toggle */}
+        <div className="flex items-center justify-between px-5 pt-4">
+          <span className="text-gray-400 text-xs font-medium">{language === 'bn' ? 'ক্যালকুলেটর' : 'Calculator'}</span>
+          <button onClick={() => setShowHistory(!showHistory)} className={`text-gray-400 hover:text-white p-1 transition-colors ${showHistory ? 'text-emerald-400' : ''}`}>
+            <History className="w-4 h-4" />
+          </button>
         </div>
-        <div className="grid grid-cols-4 gap-3">
-          {buttons.map((row, ri) => (
-            row.map((btn, ci) => {
-              const isOp = ['+', '-', '×', '÷', '='].includes(btn)
-              const isFunc = ['C', '+/-', '%'].includes(btn)
-              return (
-                <button key={`${ri}-${ci}`} onClick={() => handleButton(btn)}
-                  className={`h-16 rounded-2xl text-xl font-medium transition-all active:scale-95
-                    ${btn === '0' ? 'col-span-2' : ''}
-                    ${isOp ? 'bg-emerald-500 text-white hover:bg-emerald-600' : isFunc ? 'bg-gray-600 text-white hover:bg-gray-500' : 'bg-gray-700 text-white hover:bg-gray-600'}`}>
-                  {btn}
-                </button>
-              )
-            })
-          ))}
+
+        {/* History panel */}
+        {showHistory && (
+          <div className="mx-4 mb-2 bg-gray-800 rounded-xl max-h-48 overflow-y-auto">
+            <div className="flex items-center justify-between p-2 px-3 sticky top-0 bg-gray-800 z-10">
+              <span className="text-gray-400 text-xs font-medium">{language === 'bn' ? 'ইতিহাস' : 'History'} ({calcHistory.length})</span>
+              {calcHistory.length > 0 && (
+                <button onClick={clearHistory} className="text-red-400 hover:text-red-300 text-xs">{language === 'bn' ? 'মুছুন' : 'Clear'}</button>
+              )}
+            </div>
+            {calcHistory.length === 0 ? (
+              <p className="text-gray-500 text-xs text-center py-4">{language === 'bn' ? 'এখনও কোনো ক্যালকুলেশন নেই' : 'No calculations yet'}</p>
+            ) : (
+              <div className="space-y-1 px-2 pb-2">
+                {calcHistory.map(entry => (
+                  <button key={entry.id} onClick={() => useHistoryResult(entry.result)}
+                    className="w-full text-right p-2 rounded-lg hover:bg-gray-700 transition-colors group">
+                    <p className="text-gray-500 text-[10px]">{entry.date}</p>
+                    <p className="text-gray-400 text-xs">{entry.expression}</p>
+                    <p className="text-emerald-400 text-sm font-medium group-hover:text-emerald-300">= {formatCurrency(parseFloat(entry.result))}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Display */}
+        <div className="px-6 pb-2">
+          <div className="text-right mb-4">
+            {expression && <p className="text-gray-400 text-sm h-5 truncate">{expression}</p>}
+            {!expression && operation && previousValue && <p className="text-gray-400 text-sm h-5 truncate">{formatCurrency(parseFloat(previousValue))} {operation}</p>}
+            <p className="text-white text-4xl font-light truncate">{display.includes('.') ? display : formatCurrency(parseFloat(display))}</p>
+          </div>
+        </div>
+
+        {/* Buttons */}
+        <div className="px-4 pb-5">
+          <div className="grid grid-cols-4 gap-3">
+            {buttons.map((row, ri) => (
+              row.map((btn, ci) => {
+                const isOp = ['+', '-', '×', '÷', '='].includes(btn)
+                const isFunc = ['C', '⌫', '%'].includes(btn)
+                const isActiveOp = operation === btn && resetDisplay
+                return (
+                  <button key={`${ri}-${ci}`} onClick={() => handleButton(btn)}
+                    className={`h-14 rounded-2xl text-xl font-medium transition-all active:scale-95
+                      ${btn === '0' ? 'col-span-2' : ''}
+                      ${isOp ? (isActiveOp ? 'bg-emerald-300 text-gray-900' : 'bg-emerald-500 text-white hover:bg-emerald-600') : isFunc ? 'bg-gray-600 text-white hover:bg-gray-500' : 'bg-gray-700 text-white hover:bg-gray-600'}`}>
+                    {btn}
+                  </button>
+                )
+              })
+            ))}
+          </div>
         </div>
       </div>
     </div>
