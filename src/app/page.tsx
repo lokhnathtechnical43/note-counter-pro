@@ -1925,29 +1925,18 @@ function DocScannerPage() {
   const [autoSave, setAutoSave] = useState(false)
   const videoRef = React.useRef<HTMLVideoElement>(null)
 
-  // New crop state: 4 corner points as percentages (0-1) of the image
+  // Crop state: 4 corner points as percentages (0-1) of the image
   const [cropCorners, setCropCorners] = useState<{ tl: { x: number; y: number }; tr: { x: number; y: number }; br: { x: number; y: number }; bl: { x: number; y: number } } | null>(null)
-  const [draggingHandle, setDraggingHandle] = useState<string | null>(null) // 'tl','tr','br','bl','top','right','bottom','left'
+  const [draggingHandle, setDraggingHandle] = useState<string | null>(null)
   const imageRef = React.useRef<HTMLImageElement>(null)
   const [imageNaturalSize, setImageNaturalSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 })
-  const [rotation, setRotation] = useState(0) // 0, 90, 180, 270
+  const [rotation, setRotation] = useState(0)
   const [vaultLoaded, setVaultLoaded] = useState(false)
   const [magnifier, setMagnifier] = useState<{ x: number; y: number; show: boolean }>({ x: 0, y: 0, show: false })
-  const magnifierCanvasRef = React.useRef<HTMLCanvasElement>(null)
 
-  // Refs for stable event listeners (avoid re-creating listeners on every state change)
-  const draggingHandleRef = useRef<string | null>(null)
-  const cropCornersRef = useRef<typeof cropCorners>(null)
-  const editingDocRef = useRef<string | null>(null)
-  const scannedDocsRef = useRef<ScanDoc[]>([])
-
-  // Keep refs in sync with state
-  useEffect(() => { draggingHandleRef.current = draggingHandle }, [draggingHandle])
-  useEffect(() => { cropCornersRef.current = cropCorners }, [cropCorners])
-  useEffect(() => { editingDocRef.current = editingDoc }, [editingDoc])
-  useEffect(() => { scannedDocsRef.current = scannedDocs }, [scannedDocs])
-
-  // Pre-loaded image for magnifier
+  // Simple drag tracking ref - only set during active drag, read by document-level listeners
+  const dragRef = useRef<{ handle: string } | null>(null)
+  // Pre-loaded image for magnifier and crop/rotate operations
   const magnifierImgRef = useRef<HTMLImageElement | null>(null)
   const [magnifierImgReady, setMagnifierImgReady] = useState(false)
 
@@ -2112,129 +2101,104 @@ function DocScannerPage() {
     toast({ title: language === 'bn' ? `${unsaved.length}টি ডকুমেন্ট ডকভল্টে সেভ হয়েছে!` : `${unsaved.length} documents saved to DocVault!` })
   }
 
-  // Pre-load image for magnifier when editing doc changes
+  // Pre-load image for magnifier/crop when editing doc changes
   useEffect(() => {
     if (!editingDoc) return
-    const doc = scannedDocsRef.current.find(d => d.id === editingDoc)
+    const doc = scannedDocs.find(d => d.id === editingDoc)
     if (!doc) return
-    const filtered = getFilteredData(doc)
     const img = new Image()
     img.onload = () => {
       magnifierImgRef.current = img
       setMagnifierImgReady(true)
     }
-    img.src = filtered
+    img.src = doc.filter === 'original' ? doc.data : getFilteredData(doc)
     return () => { magnifierImgRef.current = null; setMagnifierImgReady(false) }
-  }, [editingDoc])
+  }, [editingDoc, scannedDocs])
 
-  const handleCropMouseDown = (e: React.PointerEvent, handle: string) => {
+  // ============ CROP DRAG SYSTEM (CamScanner-style) ============
+  // How pro scanner apps do it: document-level listeners, no pointer capture,
+  // simple ref-based drag tracking, CSS-based overlay
+
+  const onHandlePointerDown = (e: React.PointerEvent, handle: string) => {
     e.preventDefault()
     e.stopPropagation()
-    // Capture the pointer on the target element for reliable tracking
-    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+    // Store drag info in ref (synchronous, no stale closure issues)
+    dragRef.current = { handle }
     setDraggingHandle(handle)
-    draggingHandleRef.current = handle
     setMagnifier(prev => ({ ...prev, show: true }))
   }
 
-  // Stable pointer move handler using refs (no dependency on state that changes during drag)
-  const handlePointerMove = useCallback((clientX: number, clientY: number) => {
-    const handle = draggingHandleRef.current
-    const corners = cropCornersRef.current
-    if (!handle || !corners) return
-    if (!imageRef.current) return
-    const imgRect = imageRef.current.getBoundingClientRect()
-    if (!imgRect) return
-
-    // Convert client coords to percentage (0-1) within the ACTUAL image bounds
-    const px = Math.max(0, Math.min(1, (clientX - imgRect.left) / imgRect.width))
-    const py = Math.max(0, Math.min(1, (clientY - imgRect.top) / imgRect.height))
-
-    // Update magnifier position
-    setMagnifier({ x: px, y: py, show: true })
-
-    // Draw magnifier using pre-loaded image
-    if (magnifierImgRef.current && magnifierCanvasRef.current) {
-      const mCanvas = magnifierCanvasRef.current
-      const mCtx = mCanvas.getContext('2d')
-      if (mCtx) {
-        const img = magnifierImgRef.current
-        const nw = img.naturalWidth || 800
-        const nh = img.naturalHeight || 600
-        const zoomFactor = 3
-        const lensSize = 120
-        mCanvas.width = lensSize
-        mCanvas.height = lensSize
-        const srcX = Math.max(0, Math.min(nw - lensSize / zoomFactor, px * nw - lensSize / zoomFactor / 2))
-        const srcY = Math.max(0, Math.min(nh - lensSize / zoomFactor, py * nh - lensSize / zoomFactor / 2))
-        const srcW = lensSize / zoomFactor
-        const srcH = lensSize / zoomFactor
-        mCtx.clearRect(0, 0, lensSize, lensSize)
-        mCtx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, lensSize, lensSize)
-        // Crosshair
-        mCtx.strokeStyle = '#22c55e'
-        mCtx.lineWidth = 1
-        mCtx.beginPath()
-        mCtx.moveTo(lensSize / 2, 0); mCtx.lineTo(lensSize / 2, lensSize)
-        mCtx.moveTo(0, lensSize / 2); mCtx.lineTo(lensSize, lensSize / 2)
-        mCtx.stroke()
-        // Border
-        mCtx.strokeStyle = '#22c55e'
-        mCtx.lineWidth = 3
-        mCtx.strokeRect(1.5, 1.5, lensSize - 3, lensSize - 3)
-      }
-    }
-
-    setCropCorners(prev => {
-      if (!prev) return prev
-      const updated = { ...prev, tl: { ...prev.tl }, tr: { ...prev.tr }, br: { ...prev.br }, bl: { ...prev.bl } }
-      switch (handle) {
-        case 'tl': updated.tl = { x: px, y: py }; break
-        case 'tr': updated.tr = { x: px, y: py }; break
-        case 'br': updated.br = { x: px, y: py }; break
-        case 'bl': updated.bl = { x: px, y: py }; break
-        case 'top': updated.tl = { ...updated.tl, y: py }; updated.tr = { ...updated.tr, y: py }; break
-        case 'bottom': updated.bl = { ...updated.bl, y: py }; updated.br = { ...updated.br, y: py }; break
-        case 'left': updated.tl = { ...updated.tl, x: px }; updated.bl = { ...updated.bl, x: px }; break
-        case 'right': updated.tr = { ...updated.tr, x: px }; updated.br = { ...updated.br, x: px }; break
-      }
-      return updated
-    })
-  }, []) // No dependencies! Uses refs for mutable state
-
-  const handlePointerUp = useCallback(() => {
-    draggingHandleRef.current = null
-    setDraggingHandle(null)
-    setMagnifier(prev => ({ ...prev, show: false }))
-  }, [])
-
-  // Global pointer move/up listeners - STABLE, never re-created
+  // Document-level pointer listeners - attached ONCE, never removed until unmount
+  // This is the key pattern used by CamScanner, Clear Scanner, etc.
   useEffect(() => {
-    const onMove = (e: PointerEvent) => {
+    const onPointerMove = (e: PointerEvent) => {
+      const drag = dragRef.current
+      if (!drag) return // No active drag, ignore
+
       e.preventDefault()
-      handlePointerMove(e.clientX, e.clientY)
+
+      // Get the current image rect on every move (handles resize/scroll)
+      if (!imageRef.current) return
+      const imgRect = imageRef.current.getBoundingClientRect()
+      if (!imgRect.width || !imgRect.height) return
+
+      // Convert pointer position to percentage (0-1) within image bounds
+      const px = Math.max(0, Math.min(1, (e.clientX - imgRect.left) / imgRect.width))
+      const py = Math.max(0, Math.min(1, (e.clientY - imgRect.top) / imgRect.height))
+
+      // Update magnifier position for rendering
+      setMagnifier({ x: px, y: py, show: true })
+
+      // Update crop corners based on which handle is being dragged
+      setCropCorners(prev => {
+        if (!prev) return prev
+        const updated = { ...prev, tl: { ...prev.tl }, tr: { ...prev.tr }, br: { ...prev.br }, bl: { ...prev.bl } }
+        switch (drag.handle) {
+          case 'tl': updated.tl = { x: px, y: py }; break
+          case 'tr': updated.tr = { x: px, y: py }; break
+          case 'br': updated.br = { x: px, y: py }; break
+          case 'bl': updated.bl = { x: px, y: py }; break
+          case 'top': updated.tl = { ...updated.tl, y: py }; updated.tr = { ...updated.tr, y: py }; break
+          case 'bottom': updated.bl = { ...updated.bl, y: py }; updated.br = { ...updated.br, y: py }; break
+          case 'left': updated.tl = { ...updated.tl, x: px }; updated.bl = { ...updated.bl, x: px }; break
+          case 'right': updated.tr = { ...updated.tr, x: px }; updated.br = { ...updated.br, x: px }; break
+        }
+        return updated
+      })
     }
-    const onUp = () => handlePointerUp()
-    window.addEventListener('pointermove', onMove, { passive: false })
-    window.addEventListener('pointerup', onUp)
+
+    const onPointerUp = () => {
+      if (!dragRef.current) return // No active drag
+      dragRef.current = null
+      setDraggingHandle(null)
+      setMagnifier(prev => ({ ...prev, show: false }))
+    }
+
+    // Use DOCUMENT not window - this is critical for reliable event capture
+    document.addEventListener('pointermove', onPointerMove, { passive: false })
+    document.addEventListener('pointerup', onPointerUp)
+    document.addEventListener('pointercancel', onPointerUp)
+
     return () => {
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup', onUp)
+      document.removeEventListener('pointermove', onPointerMove)
+      document.removeEventListener('pointerup', onPointerUp)
+      document.removeEventListener('pointercancel', onPointerUp)
     }
-  }, [handlePointerMove, handlePointerUp])
+  }, []) // Empty deps - listeners attached once, read from refs
 
   const applyCrop = () => {
     const doc = scannedDocs.find(d => d.id === editingDoc)
     if (!doc || !cropCorners) return
-    // Use pre-loaded image if available, otherwise load fresh
+    const currentCorners = cropCorners
     const doCrop = (img: HTMLImageElement) => {
-      const nw = img.naturalWidth || 800
-      const nh = img.naturalHeight || 600
-      // Support non-rectangular crop: find bounding box of the 4 corners
-      const minX = Math.min(cropCorners.tl.x, cropCorners.bl.x)
-      const minY = Math.min(cropCorners.tl.y, cropCorners.tr.y)
-      const maxX = Math.max(cropCorners.tr.x, cropCorners.br.x)
-      const maxY = Math.max(cropCorners.bl.y, cropCorners.br.y)
+      const nw = img.naturalWidth
+      const nh = img.naturalHeight
+      if (!nw || !nh) return
+      // Bounding box of the 4 corners
+      const minX = Math.min(currentCorners.tl.x, currentCorners.tr.x, currentCorners.bl.x, currentCorners.br.x)
+      const minY = Math.min(currentCorners.tl.y, currentCorners.tr.y, currentCorners.bl.y, currentCorners.br.y)
+      const maxX = Math.max(currentCorners.tl.x, currentCorners.tr.x, currentCorners.bl.x, currentCorners.br.x)
+      const maxY = Math.max(currentCorners.tl.y, currentCorners.tr.y, currentCorners.bl.y, currentCorners.br.y)
       const x = Math.round(minX * nw)
       const y = Math.round(minY * nh)
       const w = Math.round((maxX - minX) * nw)
@@ -2250,14 +2214,17 @@ function DocScannerPage() {
       setScannedDocs(prev => prev.map(d => d.id === editingDoc ? { ...d, data: croppedData, filter: 'original' as ScanFilter, savedToVault: false } : d))
       setCropMode(false)
       setCropCorners(null)
+      dragRef.current = null
+      setDraggingHandle(null)
       toast({ title: language === 'bn' ? 'ক্রপ হয়েছে!' : 'Cropped!' })
     }
+    // Use pre-loaded image if ready, otherwise load fresh with onload
     if (magnifierImgRef.current && magnifierImgRef.current.complete && magnifierImgRef.current.naturalWidth > 0) {
       doCrop(magnifierImgRef.current)
     } else {
       const img = new Image()
       img.onload = () => doCrop(img)
-      img.src = getFilteredData(doc)
+      img.src = doc.filter === 'original' ? doc.data : getFilteredData(doc)
     }
   }
 
@@ -2268,9 +2235,11 @@ function DocScannerPage() {
   const rotateImage = (degrees: number) => {
     const doc = scannedDocs.find(d => d.id === editingDoc)
     if (!doc) return
+    const currentEditingDoc = editingDoc
     const doRotate = (img: HTMLImageElement) => {
-      const nw = img.naturalWidth || 800
-      const nh = img.naturalHeight || 600
+      const nw = img.naturalWidth
+      const nh = img.naturalHeight
+      if (!nw || !nh) return
       const canvas = document.createElement('canvas')
       const ctx = canvas.getContext('2d')
       if (!ctx) return
@@ -2283,7 +2252,7 @@ function DocScannerPage() {
       ctx.rotate((degrees * Math.PI) / 180)
       ctx.drawImage(img, -nw / 2, -nh / 2)
       const rotatedData = canvas.toDataURL('image/jpeg', 0.85)
-      setScannedDocs(prev => prev.map(d => d.id === editingDoc ? { ...d, data: rotatedData, filter: 'original' as ScanFilter, savedToVault: false } : d))
+      setScannedDocs(prev => prev.map(d => d.id === currentEditingDoc ? { ...d, data: rotatedData, filter: 'original' as ScanFilter, savedToVault: false } : d))
       setRotation(prev => (prev + degrees) % 360)
       setCropCorners({ tl: { x: 0.05, y: 0.05 }, tr: { x: 0.95, y: 0.05 }, br: { x: 0.95, y: 0.95 }, bl: { x: 0.05, y: 0.95 } })
     }
@@ -2385,7 +2354,7 @@ function DocScannerPage() {
 
   // ============ EDITOR VIEW ============
   if (editingDoc && editingDocData) {
-    const filteredSrc = getFilteredData(editingDocData)
+    const filteredSrc = editingDocData.filter === 'original' ? editingDocData.data : getFilteredData(editingDocData)
     const defaultCorners = { tl: { x: 0.05, y: 0.05 }, tr: { x: 0.95, y: 0.05 }, br: { x: 0.95, y: 0.95 }, bl: { x: 0.05, y: 0.95 } }
     const cc = cropCorners || defaultCorners
 
@@ -2393,7 +2362,7 @@ function DocScannerPage() {
       <div className="flex flex-col h-[100dvh] bg-black">
         {/* Green Header */}
         <div className="flex items-center justify-between px-4 py-3 bg-emerald-700 shrink-0">
-          <button onClick={() => { setEditingDoc(null); setCropMode(false); setCropCorners(null); setRotation(0) }} className="text-white flex items-center gap-1">
+          <button onClick={() => { setEditingDoc(null); setCropMode(false); setCropCorners(null); setRotation(0); dragRef.current = null; setDraggingHandle(null) }} className="text-white flex items-center gap-1">
             <ChevronLeft className="w-5 h-5" />
           </button>
           <h2 className="text-white font-semibold text-base">{cropMode ? (language === 'bn' ? 'বর্ডার সমন্বয়' : 'Border Adjustment') : (language === 'bn' ? 'স্ক্যান সম্পাদনা' : 'Edit Scan')}</h2>
@@ -2405,9 +2374,6 @@ function DocScannerPage() {
             <div className="w-6" />
           )}
         </div>
-
-        {/* Hidden canvas for magnifier rendering */}
-        <canvas ref={magnifierCanvasRef} className="hidden" />
 
         {/* Main Image Area */}
         <div className={`flex-1 relative flex items-center justify-center overflow-hidden bg-black p-2 ${cropMode ? 'touch-none' : ''}`}>
@@ -2429,12 +2395,6 @@ function DocScannerPage() {
             {/* Crop Overlay - positioned over the actual image */}
             {cropMode && (
               <>
-                {/* Semi-transparent overlay with cutout for crop area */}
-                <div className="absolute inset-0 pointer-events-none" style={{
-                  boxShadow: `${cc.tl.x * 100}% ${cc.tl.y * 100}% 0 ${Math.max(2000, 3000)}px rgba(0,0,0,0.6)`,
-                  clipPath: 'inset(0)',
-                }} />
-
                 {/* Top dim */}
                 <div className="absolute pointer-events-none bg-black/60" style={{
                   top: 0, left: 0, right: 0,
@@ -2469,23 +2429,42 @@ function DocScannerPage() {
                   <line x1={`${cc.tl.x * 100}%`} y1={`${(cc.tl.y + cc.bl.y * 2) / 3 * 100}%`} x2={`${cc.tr.x * 100}%`} y2={`${(cc.tr.y + cc.br.y * 2) / 3 * 100}%`} stroke="rgba(255,255,255,0.2)" strokeWidth="0.8" />
                 </svg>
 
-                {/* Corner Handles - larger touch targets */}
+                {/* Corner Handles - large touch targets, CamScanner style */}
                 {(['tl', 'tr', 'br', 'bl'] as const).map(corner => {
                   const pos = cc[corner]
                   return (
                     <div
                       key={corner}
-                      onPointerDown={(e) => handleCropMouseDown(e, corner)}
-                      className="absolute z-20 touch-none cursor-grab active:cursor-grabbing"
+                      onPointerDown={(e) => onHandlePointerDown(e, corner)}
+                      className="absolute z-20 cursor-grab active:cursor-grabbing"
                       style={{
                         left: `${pos.x * 100}%`,
                         top: `${pos.y * 100}%`,
                         transform: 'translate(-50%, -50%)',
                         width: 48, height: 48,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        touchAction: 'none'
                       }}
                     >
-                      <div className="w-7 h-7 rounded-full bg-emerald-500 border-[3px] border-white shadow-lg shadow-black/60" />
+                      {/* L-shaped corner indicators like CamScanner */}
+                      <div className="relative w-6 h-6">
+                        {corner === 'tl' && <>
+                          <div className="absolute top-0 left-0 w-5 h-[3px] bg-white rounded-full" />
+                          <div className="absolute top-0 left-0 w-[3px] h-5 bg-white rounded-full" />
+                        </>}
+                        {corner === 'tr' && <>
+                          <div className="absolute top-0 right-0 w-5 h-[3px] bg-white rounded-full" />
+                          <div className="absolute top-0 right-0 w-[3px] h-5 bg-white rounded-full" />
+                        </>}
+                        {corner === 'bl' && <>
+                          <div className="absolute bottom-0 left-0 w-5 h-[3px] bg-white rounded-full" />
+                          <div className="absolute bottom-0 left-0 w-[3px] h-5 bg-white rounded-full" />
+                        </>}
+                        {corner === 'br' && <>
+                          <div className="absolute bottom-0 right-0 w-5 h-[3px] bg-white rounded-full" />
+                          <div className="absolute bottom-0 right-0 w-[3px] h-5 bg-white rounded-full" />
+                        </>}
+                      </div>
                     </div>
                   )
                 })}
@@ -2499,59 +2478,59 @@ function DocScannerPage() {
                 ].map(({ id, pos }) => (
                   <div
                     key={id}
-                    onPointerDown={(e) => handleCropMouseDown(e, id)}
-                    className="absolute z-20 touch-none cursor-grab active:cursor-grabbing"
+                    onPointerDown={(e) => onHandlePointerDown(e, id)}
+                    className="absolute z-20 cursor-grab active:cursor-grabbing"
                     style={{
                       left: `${pos.x * 100}%`,
                       top: `${pos.y * 100}%`,
                       transform: 'translate(-50%, -50%)',
-                      width: 40, height: 40,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center'
+                      width: 44, height: 44,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      touchAction: 'none'
                     }}
                   >
-                    <div className="w-5 h-5 bg-emerald-500 border-2 border-white shadow-lg shadow-black/60 rounded-[3px]" />
+                    <div className={`bg-emerald-400 border-2 border-white shadow-lg shadow-black/60 rounded-sm ${id === 'top' || id === 'bottom' ? 'w-8 h-2' : 'w-2 h-8'}`} />
                   </div>
                 ))}
 
-                {/* Magnifier / Zoom Lens */}
-                {magnifier.show && draggingHandle && magnifierImgRef.current && (
+                {/* Magnifier / Zoom Lens - shows zoomed view while dragging */}
+                {magnifier.show && draggingHandle && magnifierImgReady && magnifierImgRef.current && (
                   <div
                     className="absolute z-30 pointer-events-none"
                     style={{
-                      left: `${Math.min(magnifier.x * 100 + 8, 65)}%`,
-                      top: `${Math.max(magnifier.y * 100 - 40, 2)}%`,
+                      left: `${Math.min(magnifier.x * 100 + 8, 60)}%`,
+                      top: `${Math.max(magnifier.y * 100 - 45, 2)}%`,
                     }}
                   >
                     <div className="relative">
-                      <div className="w-[110px] h-[110px] rounded-2xl border-[3px] border-emerald-400 shadow-2xl shadow-black/70 overflow-hidden bg-black/90">
+                      <div className="w-[100px] h-[100px] rounded-xl border-[3px] border-emerald-400 shadow-2xl shadow-black/80 overflow-hidden bg-black">
                         <canvas
-                          width={120}
-                          height={120}
-                          style={{ width: 110, height: 110 }}
+                          width={100}
+                          height={100}
+                          style={{ width: 100, height: 100, display: 'block' }}
                           ref={(el) => {
-                            if (el && magnifierImgRef.current) {
-                              const mCtx = el.getContext('2d')
-                              if (mCtx) {
-                                const img = magnifierImgRef.current
-                                const nw = img.naturalWidth || 800
-                                const nh = img.naturalHeight || 600
-                                const zoomFactor = 3.5
-                                const displaySize = 120
-                                const srcX = Math.max(0, Math.min(nw - displaySize / zoomFactor, magnifier.x * nw - displaySize / zoomFactor / 2))
-                                const srcY = Math.max(0, Math.min(nh - displaySize / zoomFactor, magnifier.y * nh - displaySize / zoomFactor / 2))
-                                const srcW = displaySize / zoomFactor
-                                const srcH = displaySize / zoomFactor
-                                mCtx.clearRect(0, 0, displaySize, displaySize)
-                                mCtx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, displaySize, displaySize)
-                                // Crosshair
-                                mCtx.strokeStyle = 'rgba(34,197,94,0.8)'
-                                mCtx.lineWidth = 1
-                                mCtx.beginPath()
-                                mCtx.moveTo(displaySize / 2, 0); mCtx.lineTo(displaySize / 2, displaySize)
-                                mCtx.moveTo(0, displaySize / 2); mCtx.lineTo(displaySize, displaySize / 2)
-                                mCtx.stroke()
-                              }
-                            }
+                            if (!el || !magnifierImgRef.current) return
+                            const mCtx = el.getContext('2d')
+                            if (!mCtx) return
+                            const img = magnifierImgRef.current!
+                            const nw = img.naturalWidth
+                            const nh = img.naturalHeight
+                            if (!nw || !nh) return
+                            const zoomFactor = 3.5
+                            const displaySize = 100
+                            const srcW = displaySize / zoomFactor
+                            const srcH = displaySize / zoomFactor
+                            const srcX = Math.max(0, Math.min(nw - srcW, magnifier.x * nw - srcW / 2))
+                            const srcY = Math.max(0, Math.min(nh - srcH, magnifier.y * nh - srcH / 2))
+                            mCtx.clearRect(0, 0, displaySize, displaySize)
+                            mCtx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, displaySize, displaySize)
+                            // Crosshair
+                            mCtx.strokeStyle = 'rgba(34,197,94,0.7)'
+                            mCtx.lineWidth = 1
+                            mCtx.beginPath()
+                            mCtx.moveTo(displaySize / 2, 0); mCtx.lineTo(displaySize / 2, displaySize)
+                            mCtx.moveTo(0, displaySize / 2); mCtx.lineTo(displaySize, displaySize / 2)
+                            mCtx.stroke()
                           }}
                         />
                       </div>
