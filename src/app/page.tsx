@@ -1825,26 +1825,16 @@ const NoteCounterPage = memo(function NoteCounterPage() {
     <div className="pb-28 bg-gray-50 dark:bg-gray-950 min-h-screen">
       {/* ===== HEADER - Light/dark theme ===== */}
       <div className="bg-white dark:bg-gray-900 sticky top-0 z-30">
-        {/* Row 1: Title */}
         <div className="px-4 py-3 flex items-center justify-between">
           <h1 className="font-bold text-lg">{language === 'bn' ? 'নোট কাউন্টার' : 'Note Counter'}</h1>
-        </div>
-        {/* Row 2: Action buttons */}
-        <div className="px-4 pb-2 flex items-center gap-2">
-          <button onClick={() => setShowCalc(!showCalc)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors">
-            <Calculator className="w-4 h-4" /> {language === 'bn' ? 'ক্যালকুলেটর' : 'Calc'}
-          </button>
-          <button onClick={handleShare} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors">
-            <Share2 className="w-4 h-4" /> {language === 'bn' ? 'শেয়ার' : 'Share'}
-          </button>
-          <button onClick={resetAll} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors">
-            <Trash2 className="w-4 h-4" /> {language === 'bn' ? 'রিসেট' : 'Reset'}
+          <button onClick={resetAll} className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-red-500 transition-colors" title={language === 'bn' ? 'রিসেট' : 'Reset'}>
+            <RefreshCw className="w-4 h-4" />
           </button>
         </div>
       </div>
 
       {/* ===== SUMMARY BAR ===== */}
-      <div className="bg-white dark:bg-gray-900 border-b border-border/50 px-4 py-2 flex items-center justify-between sticky top-[84px] z-20">
+      <div className="bg-white dark:bg-gray-900 border-b border-border/50 px-4 py-2 flex items-center justify-center sticky top-[52px] z-20">
         <div className="flex items-center gap-3">
           <div className="bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
             <span className="text-muted-foreground text-xs font-medium">N</span>
@@ -1855,11 +1845,6 @@ const NoteCounterPage = memo(function NoteCounterPage() {
             <span className="text-yellow-500 dark:text-yellow-400 font-bold text-lg">{grandTotal.toLocaleString('en-IN')}</span>
           </div>
         </div>
-        {total > 0 && (
-          <button onClick={sendTotalToCalc} className="text-emerald-600 dark:text-emerald-400 text-xs font-medium px-2 py-1 border border-emerald-600/50 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors">
-            → {language === 'bn' ? 'ক্যালক' : 'Calc'}
-          </button>
-        )}
       </div>
 
       {/* ===== ENTER AMOUNT TO PAYABLE/RECEIVABLE ===== */}
@@ -2095,70 +2080,6 @@ const NoteCounterPage = memo(function NoteCounterPage() {
           <Upload className="w-4 h-4" /> {language === 'bn' ? 'সেভ আউট' : 'Save Out'}
         </button>
       </div>
-
-      {/* ===== CALCULATOR ===== */}
-      {showCalc && (
-        <div className="px-3 pt-3">
-          <div className="rounded-xl overflow-hidden border border-gray-800">
-            <div className="flex items-center justify-between p-3 bg-gray-900">
-              <div className="flex items-center gap-2">
-                <Calculator className="w-4 h-4 text-emerald-400" />
-                <span className="text-gray-300 text-sm font-medium">{language === 'bn' ? 'ক্যালকুলেটর' : 'Calculator'}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button onClick={() => setShowCalcHistory(!showCalcHistory)} className={`text-gray-400 hover:text-white p-1 transition-colors ${showCalcHistory ? 'text-emerald-400' : ''}`}><History className="w-4 h-4" /></button>
-                <button onClick={() => setShowCalc(false)} className="text-gray-400 hover:text-white p-1"><X className="w-4 h-4" /></button>
-              </div>
-            </div>
-            {showCalcHistory && (
-              <div className="bg-gray-800 border-t border-gray-700 max-h-48 overflow-y-auto">
-                <div className="flex items-center justify-between p-2 px-3 sticky top-0 bg-gray-800 z-10">
-                  <span className="text-gray-400 text-xs font-medium">{language === 'bn' ? 'ইতিহাস' : 'History'} ({calcHistory.length})</span>
-                  {calcHistory.length > 0 && <button onClick={clearCalcHistory} className="text-red-400 hover:text-red-300 text-xs">{language === 'bn' ? 'মুছুন' : 'Clear'}</button>}
-                </div>
-                {calcHistory.length === 0 ? (
-                  <p className="text-gray-500 text-xs text-center py-4">{language === 'bn' ? 'এখনও কোনো ক্যালকুলেশন নেই' : 'No calculations yet'}</p>
-                ) : (
-                  <div className="space-y-1 px-2 pb-2">
-                    {calcHistory.map(entry => (
-                      <button key={entry.id} onClick={() => applyHistoryResult(entry.result)} className="w-full text-right p-2 rounded-lg hover:bg-gray-700 transition-colors group">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1">{entry.fromNoteCount && <span className="text-[10px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full">{language === 'bn' ? 'নোট' : 'Note'}</span>}</div>
-                          <p className="text-gray-500 text-[10px]">{entry.date}</p>
-                        </div>
-                        <p className="text-gray-400 text-xs">{entry.expression}</p>
-                        <p className="text-emerald-400 text-sm font-medium group-hover:text-emerald-300">= {formatCurrency(parseFloat(entry.result))}</p>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-            <div className="bg-gray-900 p-4 pt-3">
-              <div className="text-right mb-4 p-3 bg-gray-800 rounded-xl">
-                {calcExpression && <p className="text-gray-400 text-sm h-5 truncate">{calcExpression}</p>}
-                {!calcExpression && calcOperation && calcPrevious && <p className="text-gray-400 text-sm h-5 truncate">{formatCurrency(parseFloat(calcPrevious))} {calcOperation}</p>}
-                <p className="text-white text-3xl font-light truncate">{calcDisplay.includes('.') ? calcDisplay : formatCurrency(parseFloat(calcDisplay))}</p>
-              </div>
-              <div className="grid grid-cols-4 gap-2">
-                {calcButtons.map((row, ri) => (
-                  row.map((btn, ci) => {
-                    const isOp = ['+', '-', '×', '÷', '='].includes(btn)
-                    const isFunc = ['C', '⌫', '%'].includes(btn)
-                    const isActiveOp = calcOperation === btn && calcReset
-                    return (
-                      <button key={`${ri}-${ci}`} onClick={() => calcHandleButton(btn)}
-                        className={`h-12 rounded-xl text-lg font-medium transition-all active:scale-95 ${btn === '0' ? 'col-span-2' : ''} ${isOp ? (isActiveOp ? 'bg-emerald-300 text-gray-900' : 'bg-emerald-500 text-white hover:bg-emerald-600') : isFunc ? 'bg-gray-600 text-white hover:bg-gray-500' : 'bg-gray-700 text-white hover:bg-gray-600'}`}>
-                        {btn}
-                      </button>
-                    )
-                  })
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ===== SAVED ENTRIES ===== */}
       {showSaved && (
