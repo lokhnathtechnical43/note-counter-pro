@@ -1934,11 +1934,75 @@ function DocScannerPage() {
   const [vaultLoaded, setVaultLoaded] = useState(false)
   const [magnifier, setMagnifier] = useState<{ x: number; y: number; show: boolean }>({ x: 0, y: 0, show: false })
 
-  // Simple drag tracking ref - only set during active drag, read by document-level listeners
-  const dragRef = useRef<{ handle: string } | null>(null)
+  // Simple drag tracking ref
+  const dragRef = useRef<{ handle: string; pointerId: number } | null>(null)
   // Pre-loaded image for magnifier and crop/rotate operations
   const magnifierImgRef = useRef<HTMLImageElement | null>(null)
   const [magnifierImgReady, setMagnifierImgReady] = useState(false)
+
+  // ============ CROP DRAG - Pointer Capture on handles ============
+  // This is the MOST reliable mobile drag pattern:
+  // setPointerCapture redirects ALL pointer events to the handle element,
+  // so onPointerMove/onPointerUp on the handle work even if finger moves outside.
+  // No document/window listeners needed!
+
+  const getCropHandleHandlers = (handleId: string) => ({
+    onPointerDown: (e: React.PointerEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      // Capture pointer - ALL subsequent events go to THIS element
+      ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+      dragRef.current = { handle: handleId, pointerId: e.pointerId }
+      setDraggingHandle(handleId)
+      setMagnifier(prev => ({ ...prev, show: true }))
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      const drag = dragRef.current
+      if (!drag || drag.handle !== handleId) return
+
+      if (!imageRef.current) return
+      const imgRect = imageRef.current.getBoundingClientRect()
+      if (!imgRect.width || !imgRect.height) return
+
+      const px = Math.max(0, Math.min(1, (e.clientX - imgRect.left) / imgRect.width))
+      const py = Math.max(0, Math.min(1, (e.clientY - imgRect.top) / imgRect.height))
+
+      setMagnifier({ x: px, y: py, show: true })
+
+      setCropCorners(prev => {
+        if (!prev) return prev
+        const u = { ...prev, tl: { ...prev.tl }, tr: { ...prev.tr }, br: { ...prev.br }, bl: { ...prev.bl } }
+        switch (drag.handle) {
+          case 'tl': u.tl = { x: px, y: py }; break
+          case 'tr': u.tr = { x: px, y: py }; break
+          case 'br': u.br = { x: px, y: py }; break
+          case 'bl': u.bl = { x: px, y: py }; break
+          case 'top': u.tl = { ...u.tl, y: py }; u.tr = { ...u.tr, y: py }; break
+          case 'bottom': u.bl = { ...u.bl, y: py }; u.br = { ...u.br, y: py }; break
+          case 'left': u.tl = { ...u.tl, x: px }; u.bl = { ...u.bl, x: px }; break
+          case 'right': u.tr = { ...u.tr, x: px }; u.br = { ...u.br, x: px }; break
+        }
+        return u
+      })
+    },
+    onPointerUp: (e: React.PointerEvent) => {
+      const drag = dragRef.current
+      if (!drag || drag.handle !== handleId) return
+      try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId) } catch {}
+      dragRef.current = null
+      setDraggingHandle(null)
+      setMagnifier(prev => ({ ...prev, show: false }))
+    },
+    onLostPointerCapture: () => {
+      // Failsafe: if capture is lost unexpectedly, clean up
+      const drag = dragRef.current
+      if (drag && drag.handle === handleId) {
+        dragRef.current = null
+        setDraggingHandle(null)
+        setMagnifier(prev => ({ ...prev, show: false }))
+      }
+    },
+  })
 
   // Load vault documents on mount
   const loadVaultDocs = useCallback(async () => {
@@ -2115,76 +2179,7 @@ function DocScannerPage() {
     return () => { magnifierImgRef.current = null; setMagnifierImgReady(false) }
   }, [editingDoc, scannedDocs])
 
-  // ============ CROP DRAG SYSTEM (CamScanner-style) ============
-  // How pro scanner apps do it: document-level listeners, no pointer capture,
-  // simple ref-based drag tracking, CSS-based overlay
-
-  const onHandlePointerDown = (e: React.PointerEvent, handle: string) => {
-    e.preventDefault()
-    e.stopPropagation()
-    // Store drag info in ref (synchronous, no stale closure issues)
-    dragRef.current = { handle }
-    setDraggingHandle(handle)
-    setMagnifier(prev => ({ ...prev, show: true }))
-  }
-
-  // Document-level pointer listeners - attached ONCE, never removed until unmount
-  // This is the key pattern used by CamScanner, Clear Scanner, etc.
-  useEffect(() => {
-    const onPointerMove = (e: PointerEvent) => {
-      const drag = dragRef.current
-      if (!drag) return // No active drag, ignore
-
-      e.preventDefault()
-
-      // Get the current image rect on every move (handles resize/scroll)
-      if (!imageRef.current) return
-      const imgRect = imageRef.current.getBoundingClientRect()
-      if (!imgRect.width || !imgRect.height) return
-
-      // Convert pointer position to percentage (0-1) within image bounds
-      const px = Math.max(0, Math.min(1, (e.clientX - imgRect.left) / imgRect.width))
-      const py = Math.max(0, Math.min(1, (e.clientY - imgRect.top) / imgRect.height))
-
-      // Update magnifier position for rendering
-      setMagnifier({ x: px, y: py, show: true })
-
-      // Update crop corners based on which handle is being dragged
-      setCropCorners(prev => {
-        if (!prev) return prev
-        const updated = { ...prev, tl: { ...prev.tl }, tr: { ...prev.tr }, br: { ...prev.br }, bl: { ...prev.bl } }
-        switch (drag.handle) {
-          case 'tl': updated.tl = { x: px, y: py }; break
-          case 'tr': updated.tr = { x: px, y: py }; break
-          case 'br': updated.br = { x: px, y: py }; break
-          case 'bl': updated.bl = { x: px, y: py }; break
-          case 'top': updated.tl = { ...updated.tl, y: py }; updated.tr = { ...updated.tr, y: py }; break
-          case 'bottom': updated.bl = { ...updated.bl, y: py }; updated.br = { ...updated.br, y: py }; break
-          case 'left': updated.tl = { ...updated.tl, x: px }; updated.bl = { ...updated.bl, x: px }; break
-          case 'right': updated.tr = { ...updated.tr, x: px }; updated.br = { ...updated.br, x: px }; break
-        }
-        return updated
-      })
-    }
-
-    const onPointerUp = () => {
-      if (!dragRef.current) return // No active drag
-      dragRef.current = null
-      setDraggingHandle(null)
-      setMagnifier(prev => ({ ...prev, show: false }))
-    }
-
-    // Use DOCUMENT not window - this is critical for reliable event capture
-    document.addEventListener('pointermove', onPointerMove, { passive: false })
-    document.addEventListener('pointerup', onPointerUp)
-    document.addEventListener('pointercancel', onPointerUp)
-
-    return () => {
-      document.removeEventListener('pointermove', onPointerMove)
-      document.removeEventListener('pointerup', onPointerUp)
-      document.removeEventListener('pointercancel', onPointerUp)
-    }
-  }, []) // Empty deps - listeners attached once, read from refs
+  // (Crop drag handlers are defined above via getCropHandleHandlers)
 
   const applyCrop = () => {
     const doc = scannedDocs.find(d => d.id === editingDoc)
@@ -2429,69 +2424,82 @@ function DocScannerPage() {
                   <line x1={`${cc.tl.x * 100}%`} y1={`${(cc.tl.y + cc.bl.y * 2) / 3 * 100}%`} x2={`${cc.tr.x * 100}%`} y2={`${(cc.tr.y + cc.br.y * 2) / 3 * 100}%`} stroke="rgba(255,255,255,0.2)" strokeWidth="0.8" />
                 </svg>
 
-                {/* Corner Handles - large touch targets, CamScanner style */}
+                {/* Corner Handles - CamScanner style L-shaped corners with pointer capture */}
                 {(['tl', 'tr', 'br', 'bl'] as const).map(corner => {
                   const pos = cc[corner]
+                  const handlers = getCropHandleHandlers(corner)
+                  const isActive = draggingHandle === corner
                   return (
                     <div
                       key={corner}
-                      onPointerDown={(e) => onHandlePointerDown(e, corner)}
-                      className="absolute z-20 cursor-grab active:cursor-grabbing"
+                      {...handlers}
+                      className="absolute z-20"
                       style={{
                         left: `${pos.x * 100}%`,
                         top: `${pos.y * 100}%`,
                         transform: 'translate(-50%, -50%)',
-                        width: 48, height: 48,
+                        width: 52, height: 52,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        touchAction: 'none'
+                        touchAction: 'none',
+                        cursor: isActive ? 'grabbing' : 'grab',
                       }}
                     >
                       {/* L-shaped corner indicators like CamScanner */}
-                      <div className="relative w-6 h-6">
+                      <div className="relative" style={{ width: isActive ? 28 : 24, height: isActive ? 28 : 24 }}>
                         {corner === 'tl' && <>
-                          <div className="absolute top-0 left-0 w-5 h-[3px] bg-white rounded-full" />
-                          <div className="absolute top-0 left-0 w-[3px] h-5 bg-white rounded-full" />
+                          <div className="absolute top-0 left-0 rounded-sm" style={{ width: isActive ? 24 : 20, height: 3, backgroundColor: isActive ? '#4ade80' : 'white' }} />
+                          <div className="absolute top-0 left-0 rounded-sm" style={{ width: 3, height: isActive ? 24 : 20, backgroundColor: isActive ? '#4ade80' : 'white' }} />
                         </>}
                         {corner === 'tr' && <>
-                          <div className="absolute top-0 right-0 w-5 h-[3px] bg-white rounded-full" />
-                          <div className="absolute top-0 right-0 w-[3px] h-5 bg-white rounded-full" />
+                          <div className="absolute top-0 right-0 rounded-sm" style={{ width: isActive ? 24 : 20, height: 3, backgroundColor: isActive ? '#4ade80' : 'white' }} />
+                          <div className="absolute top-0 right-0 rounded-sm" style={{ width: 3, height: isActive ? 24 : 20, backgroundColor: isActive ? '#4ade80' : 'white' }} />
                         </>}
                         {corner === 'bl' && <>
-                          <div className="absolute bottom-0 left-0 w-5 h-[3px] bg-white rounded-full" />
-                          <div className="absolute bottom-0 left-0 w-[3px] h-5 bg-white rounded-full" />
+                          <div className="absolute bottom-0 left-0 rounded-sm" style={{ width: isActive ? 24 : 20, height: 3, backgroundColor: isActive ? '#4ade80' : 'white' }} />
+                          <div className="absolute bottom-0 left-0 rounded-sm" style={{ width: 3, height: isActive ? 24 : 20, backgroundColor: isActive ? '#4ade80' : 'white' }} />
                         </>}
                         {corner === 'br' && <>
-                          <div className="absolute bottom-0 right-0 w-5 h-[3px] bg-white rounded-full" />
-                          <div className="absolute bottom-0 right-0 w-[3px] h-5 bg-white rounded-full" />
+                          <div className="absolute bottom-0 right-0 rounded-sm" style={{ width: isActive ? 24 : 20, height: 3, backgroundColor: isActive ? '#4ade80' : 'white' }} />
+                          <div className="absolute bottom-0 right-0 rounded-sm" style={{ width: 3, height: isActive ? 24 : 20, backgroundColor: isActive ? '#4ade80' : 'white' }} />
                         </>}
                       </div>
                     </div>
                   )
                 })}
 
-                {/* Edge Handles */}
+                {/* Edge Handles with pointer capture */}
                 {[
                   { id: 'top', pos: { x: (cc.tl.x + cc.tr.x) / 2, y: (cc.tl.y + cc.tr.y) / 2 } },
                   { id: 'bottom', pos: { x: (cc.bl.x + cc.br.x) / 2, y: (cc.bl.y + cc.br.y) / 2 } },
                   { id: 'left', pos: { x: (cc.tl.x + cc.bl.x) / 2, y: (cc.tl.y + cc.bl.y) / 2 } },
                   { id: 'right', pos: { x: (cc.tr.x + cc.br.x) / 2, y: (cc.tr.y + cc.br.y) / 2 } },
-                ].map(({ id, pos }) => (
-                  <div
-                    key={id}
-                    onPointerDown={(e) => onHandlePointerDown(e, id)}
-                    className="absolute z-20 cursor-grab active:cursor-grabbing"
-                    style={{
-                      left: `${pos.x * 100}%`,
-                      top: `${pos.y * 100}%`,
-                      transform: 'translate(-50%, -50%)',
-                      width: 44, height: 44,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      touchAction: 'none'
-                    }}
-                  >
-                    <div className={`bg-emerald-400 border-2 border-white shadow-lg shadow-black/60 rounded-sm ${id === 'top' || id === 'bottom' ? 'w-8 h-2' : 'w-2 h-8'}`} />
-                  </div>
-                ))}
+                ].map(({ id, pos }) => {
+                  const handlers = getCropHandleHandlers(id)
+                  const isActive = draggingHandle === id
+                  return (
+                    <div
+                      key={id}
+                      {...handlers}
+                      className="absolute z-20"
+                      style={{
+                        left: `${pos.x * 100}%`,
+                        top: `${pos.y * 100}%`,
+                        transform: 'translate(-50%, -50%)',
+                        width: 48, height: 48,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        touchAction: 'none',
+                        cursor: isActive ? 'grabbing' : 'grab',
+                      }}
+                    >
+                      <div className={`rounded-sm shadow-lg shadow-black/60 ${id === 'top' || id === 'bottom' ? '' : ''}`} style={{
+                        width: (id === 'top' || id === 'bottom') ? (isActive ? 40 : 32) : 4,
+                        height: (id === 'left' || id === 'right') ? (isActive ? 40 : 32) : 4,
+                        backgroundColor: isActive ? '#4ade80' : '#34d399',
+                        border: '2px solid white',
+                      }} />
+                    </div>
+                  )
+                })}
 
                 {/* Magnifier / Zoom Lens - shows zoomed view while dragging */}
                 {magnifier.show && draggingHandle && magnifierImgReady && magnifierImgRef.current && (
