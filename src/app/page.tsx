@@ -1939,6 +1939,221 @@ function DocScannerPage() {
   // Pre-loaded image for magnifier and crop/rotate operations
   const magnifierImgRef = useRef<HTMLImageElement | null>(null)
   const [magnifierImgReady, setMagnifierImgReady] = useState(false)
+  const [detectingEdges, setDetectingEdges] = useState(false)
+
+  // ============ AUTO DOCUMENT EDGE DETECTION (CamScanner-like) ============
+  // Detects the document boundary in the image and returns 4 corner points as percentages (0-1)
+  const autoDetectDocumentEdges = (img: HTMLImageElement): { tl: { x: number; y: number }; tr: { x: number; y: number }; br: { x: number; y: number }; bl: { x: number; y: number } } | null => {
+    const PROC_SIZE = 300
+    let w = img.naturalWidth, h = img.naturalHeight
+    if (!w || !h) return null
+    const s = Math.min(PROC_SIZE / w, PROC_SIZE / h, 1)
+    w = Math.round(w * s)
+    h = Math.round(h * s)
+
+    const canvas = document.createElement('canvas')
+    canvas.width = w; canvas.height = h
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+    ctx.drawImage(img, 0, 0, w, h)
+    const imgData = ctx.getImageData(0, 0, w, h)
+    const px = imgData.data
+
+    // Step 1: Convert to grayscale
+    const gray = new Float32Array(w * h)
+    for (let i = 0; i < w * h; i++) {
+      gray[i] = px[i * 4] * 0.299 + px[i * 4 + 1] * 0.587 + px[i * 4 + 2] * 0.114
+    }
+
+    // Step 2: Gaussian blur (5x5, sigma=1.4) to reduce noise
+    const kernel = [1, 4, 7, 4, 1, 4, 16, 26, 16, 4, 7, 26, 41, 26, 7, 4, 16, 26, 16, 4, 1, 4, 7, 4, 1]
+    const kSum = 273
+    const blurred = new Float32Array(w * h)
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (y < 2 || y >= h - 2 || x < 2 || x >= w - 2) { blurred[y * w + x] = gray[y * w + x]; continue }
+        let sum = 0
+        for (let ky = -2; ky <= 2; ky++) {
+          for (let kx = -2; kx <= 2; kx++) {
+            sum += gray[(y + ky) * w + (x + kx)] * kernel[(ky + 2) * 5 + (kx + 2)]
+          }
+        }
+        blurred[y * w + x] = sum / kSum
+      }
+    }
+
+    // Step 3: Sobel edge detection
+    const edgesMag = new Float32Array(w * h)
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const gx = -blurred[(y - 1) * w + (x - 1)] + blurred[(y - 1) * w + (x + 1)]
+          - 2 * blurred[y * w + (x - 1)] + 2 * blurred[y * w + (x + 1)]
+          - blurred[(y + 1) * w + (x - 1)] + blurred[(y + 1) * w + (x + 1)]
+        const gy = -blurred[(y - 1) * w + (x - 1)] - 2 * blurred[(y - 1) * w + x] - blurred[(y - 1) * w + (x + 1)]
+          + blurred[(y + 1) * w + (x - 1)] + 2 * blurred[(y + 1) * w + x] + blurred[(y + 1) * w + (x + 1)]
+        edgesMag[y * w + x] = Math.sqrt(gx * gx + gy * gy)
+      }
+    }
+
+    // Step 4: Adaptive threshold - use 70th percentile of non-zero edges
+    const sortedEdges = [...edgesMag].filter(m => m > 0).sort((a, b) => a - b)
+    if (sortedEdges.length < 50) return null
+    const threshVal = sortedEdges[Math.floor(sortedEdges.length * 0.65)] || 40
+    const edgeBin = new Uint8Array(w * h)
+    for (let i = 0; i < w * h; i++) edgeBin[i] = edgesMag[i] > threshVal ? 1 : 0
+
+    // Step 5: Dilate edges to close small gaps (radius=3)
+    const dilateR = 3
+    const dilated = new Uint8Array(w * h)
+    for (let y = dilateR; y < h - dilateR; y++) {
+      for (let x = dilateR; x < w - dilateR; x++) {
+        let found = false
+        for (let dy = -dilateR; dy <= dilateR && !found; dy++) {
+          for (let dx = -dilateR; dx <= dilateR && !found; dx++) {
+            if (edgeBin[(y + dy) * w + (x + dx)]) found = true
+          }
+        }
+        dilated[y * w + x] = found ? 1 : 0
+      }
+    }
+
+    // Step 6: Flood fill from image border to find background
+    // Background = region reachable from the borders without crossing an edge
+    const visited = new Uint8Array(w * h)
+    const isBackground = new Uint8Array(w * h)
+
+    const floodFill = (sx: number, sy: number) => {
+      if (sx < 0 || sx >= w || sy < 0 || sy >= h) return
+      if (visited[sy * w + sx] || dilated[sy * w + sx]) return
+      const stack = [sx, sy]
+      while (stack.length > 0) {
+        const cy = stack.pop()!, cx = stack.pop()!
+        const idx = cy * w + cx
+        if (visited[idx] || dilated[idx]) continue
+        visited[idx] = 1
+        isBackground[idx] = 1
+        if (cx > 0 && !visited[cy * w + cx - 1]) { stack.push(cx - 1); stack.push(cy) }
+        if (cx < w - 1 && !visited[cy * w + cx + 1]) { stack.push(cx + 1); stack.push(cy) }
+        if (cy > 0 && !visited[(cy - 1) * w + cx]) { stack.push(cx); stack.push(cy - 1) }
+        if (cy < h - 1 && !visited[(cy + 1) * w + cx]) { stack.push(cx); stack.push(cy + 1) }
+      }
+    }
+
+    // Flood fill from all border pixels
+    for (let x = 0; x < w; x += 3) { floodFill(x, 0); floodFill(x, h - 1) }
+    for (let y = 0; y < h; y += 3) { floodFill(0, y); floodFill(w - 1, y) }
+    // Also fill from corners for good measure
+    floodFill(0, 0); floodFill(w - 1, 0); floodFill(0, h - 1); floodFill(w - 1, h - 1)
+
+    // Step 7: Document region = NOT background AND NOT edge
+    const isDoc = new Uint8Array(w * h)
+    let docPixelCount = 0
+    for (let i = 0; i < w * h; i++) {
+      isDoc[i] = (!isBackground[i]) ? 1 : 0
+      if (isDoc[i]) docPixelCount++
+    }
+
+    // If document covers more than 95% of image, it likely fills the frame - use default with small margin
+    if (docPixelCount > w * h * 0.95) return null
+    // If document is too small (< 10%), detection probably failed
+    if (docPixelCount < w * h * 0.10) return null
+
+    // Step 8: Find boundary pixels of the document region
+    const boundary: { x: number; y: number }[] = []
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        if (isDoc[y * w + x]) {
+          if (!isDoc[(y - 1) * w + x] || !isDoc[(y + 1) * w + x] || !isDoc[y * w + x - 1] || !isDoc[y * w + x + 1]) {
+            boundary.push({ x, y })
+          }
+        }
+      }
+    }
+
+    if (boundary.length < 20) return null
+
+    // Step 9: Find 4 corners by scoring boundary points
+    // Use directional scoring: each corner is the point that maximizes a score
+    // based on distance from center in that corner's direction
+    const centerX = boundary.reduce((s, p) => s + p.x, 0) / boundary.length
+    const centerY = boundary.reduce((s, p) => s + p.y, 0) / boundary.length
+
+    let bestTL = { x: 0, y: 0, score: -Infinity }
+    let bestTR = { x: 0, y: 0, score: -Infinity }
+    let bestBL = { x: 0, y: 0, score: -Infinity }
+    let bestBR = { x: 0, y: 0, score: -Infinity }
+
+    for (const p of boundary) {
+      const dx = p.x - centerX, dy = p.y - centerY
+      // TL: most top-left = maximize (-dx - dy)
+      const sTL = -dx - dy
+      if (sTL > bestTL.score) bestTL = { x: p.x, y: p.y, score: sTL }
+      // TR: most top-right = maximize (dx - dy)
+      const sTR = dx - dy
+      if (sTR > bestTR.score) bestTR = { x: p.x, y: p.y, score: sTR }
+      // BL: most bottom-left = maximize (-dx + dy)
+      const sBL = -dx + dy
+      if (sBL > bestBL.score) bestBL = { x: p.x, y: p.y, score: sBL }
+      // BR: most bottom-right = maximize (dx + dy)
+      const sBR = dx + dy
+      if (sBR > bestBR.score) bestBR = { x: p.x, y: p.y, score: sBR }
+    }
+
+    // Step 10: Add small padding (2%) around detected edges for safety
+    // This ensures document content is not cut off (CamScanner adds padding too)
+    const padPct = 0.02
+
+    const corners = {
+      tl: { x: Math.max(0, bestTL.x / w - padPct), y: Math.max(0, bestTL.y / h - padPct) },
+      tr: { x: Math.min(1, bestTR.x / w + padPct), y: Math.max(0, bestTR.y / h - padPct) },
+      br: { x: Math.min(1, bestBR.x / w + padPct), y: Math.min(1, bestBR.y / h + padPct) },
+      bl: { x: Math.max(0, bestBL.x / w - padPct), y: Math.min(1, bestBL.y / h + padPct) },
+    }
+
+    return corners
+  }
+
+  // Auto-detect crop corners when entering crop mode
+  const handleAutoDetectCrop = async () => {
+    setDetectingEdges(true)
+    try {
+      const doc = scannedDocs.find(d => d.id === editingDoc)
+      if (!doc) {
+        setCropCorners({ tl: { x: 0.05, y: 0.05 }, tr: { x: 0.95, y: 0.05 }, br: { x: 0.95, y: 0.95 }, bl: { x: 0.05, y: 0.95 } })
+        return
+      }
+
+      // Small delay to let UI show "Detecting..." indicator
+      await new Promise(r => setTimeout(r, 50))
+
+      // Use the pre-loaded image if available, otherwise load fresh
+      const detectWithImage = (img: HTMLImageElement) => {
+        const detected = autoDetectDocumentEdges(img)
+        if (detected) {
+          setCropCorners(detected)
+        } else {
+          // Fallback to default corners with slightly more margin
+          setCropCorners({ tl: { x: 0.03, y: 0.03 }, tr: { x: 0.97, y: 0.03 }, br: { x: 0.97, y: 0.97 }, bl: { x: 0.03, y: 0.97 } })
+        }
+      }
+
+      if (magnifierImgRef.current && magnifierImgRef.current.complete && magnifierImgRef.current.naturalWidth > 0) {
+        detectWithImage(magnifierImgRef.current)
+      } else {
+        const img = new Image()
+        await new Promise<void>((resolve) => {
+          img.onload = () => { detectWithImage(img); resolve() }
+          img.onerror = () => {
+            setCropCorners({ tl: { x: 0.05, y: 0.05 }, tr: { x: 0.95, y: 0.05 }, br: { x: 0.95, y: 0.95 }, bl: { x: 0.05, y: 0.95 } })
+            resolve()
+          }
+          img.src = doc.filter === 'original' ? doc.data : getFilteredData(doc)
+        })
+      }
+    } finally {
+      setDetectingEdges(false)
+    }
+  }
 
   // ============ CROP DRAG - Full-screen overlay pattern ============
   // The ONLY reliable mobile drag pattern: when drag starts, show a full-screen
@@ -2178,9 +2393,9 @@ function DocScannerPage() {
       let nh = img.naturalHeight
       if (!nw || !nh) return
 
-      // For perspective transform, limit max dimension to 2000px for performance
+      // For perspective transform, limit max dimension for performance
       // (pixel-by-pixel processing is slow on very large images)
-      const MAX_DIM = 2000
+      const MAX_DIM = 3000
       let scale = 1
       if (nw > MAX_DIM || nh > MAX_DIM) {
         scale = Math.min(MAX_DIM / nw, MAX_DIM / nh)
@@ -2308,6 +2523,15 @@ function DocScannerPage() {
       const dstData = ctx.createImageData(outW, outH)
       const dstPixels = dstData.data
 
+      // Initialize all destination pixels to white (opaque) instead of transparent black
+      // This prevents black/transparent borders when edge pixels are slightly outside bounds
+      for (let i = 0; i < dstPixels.length; i += 4) {
+        dstPixels[i] = 255     // R
+        dstPixels[i + 1] = 255 // G
+        dstPixels[i + 2] = 255 // B
+        dstPixels[i + 3] = 255 // A
+      }
+
       // Inverse mapping: for each destination pixel, find the source pixel
       // dst -> src using inverse homography
       // H = [[h[0],h[1],h[2]],[h[3],h[4],h[5]],[h[6],h[7],1]]
@@ -2346,32 +2570,43 @@ function DocScannerPage() {
       const ih = aug2.map(row => row[8])
 
       // For each destination pixel, find source pixel and copy
+      // FIXED: Use clamped boundary instead of strict check to prevent document cutting
+      // CamScanner-style: edge pixels are preserved by clamping source coordinates
       for (let dy = 0; dy < outH; dy++) {
         for (let dx = 0; dx < outW; dx++) {
           const w = ih[6] * dx + ih[7] * dy + 1
           const sx = (ih[0] * dx + ih[1] * dy + ih[2]) / w
           const sy = (ih[3] * dx + ih[4] * dy + ih[5]) / w
 
-          // Bilinear interpolation
+          // Skip pixels that map far outside the source image
+          if (sx < -2 || sx > nw + 1 || sy < -2 || sy > nh + 1) continue
+
+          // Bilinear interpolation with CLAMPED boundaries
+          // Instead of strict check (sx0>=0 && sx1<nw && sy0>=0 && sy1<nh),
+          // we clamp coordinates to valid range - this prevents edge pixels from being cut
           const sx0 = Math.floor(sx), sy0 = Math.floor(sy)
           const sx1 = sx0 + 1, sy1 = sy0 + 1
           const fx = sx - sx0, fy = sy - sy0
 
-          if (sx0 >= 0 && sx1 < nw && sy0 >= 0 && sy1 < nh) {
-            const idx00 = (sy0 * nw + sx0) * 4
-            const idx01 = (sy0 * nw + sx1) * 4
-            const idx10 = (sy1 * nw + sx0) * 4
-            const idx11 = (sy1 * nw + sx1) * 4
+          // Clamp source coordinates to image bounds
+          const csx0 = Math.max(0, Math.min(nw - 1, sx0))
+          const csy0 = Math.max(0, Math.min(nh - 1, sy0))
+          const csx1 = Math.max(0, Math.min(nw - 1, sx1))
+          const csy1 = Math.max(0, Math.min(nh - 1, sy1))
 
-            const dstIdx = (dy * outW + dx) * 4
-            for (let c = 0; c < 4; c++) {
-              dstPixels[dstIdx + c] = Math.round(
-                srcPixels[idx00 + c] * (1 - fx) * (1 - fy) +
-                srcPixels[idx01 + c] * fx * (1 - fy) +
-                srcPixels[idx10 + c] * (1 - fx) * fy +
-                srcPixels[idx11 + c] * fx * fy
-              )
-            }
+          const idx00 = (csy0 * nw + csx0) * 4
+          const idx01 = (csy0 * nw + csx1) * 4
+          const idx10 = (csy1 * nw + csx0) * 4
+          const idx11 = (csy1 * nw + csx1) * 4
+
+          const dstIdx = (dy * outW + dx) * 4
+          for (let c = 0; c < 4; c++) {
+            dstPixels[dstIdx + c] = Math.round(
+              srcPixels[idx00 + c] * (1 - fx) * (1 - fy) +
+              srcPixels[idx01 + c] * fx * (1 - fy) +
+              srcPixels[idx10 + c] * (1 - fx) * fy +
+              srcPixels[idx11 + c] * fx * fy
+            )
           }
         }
       }
@@ -2395,8 +2630,9 @@ function DocScannerPage() {
     }
   }
 
-  const resetCrop = () => {
-    setCropCorners({ tl: { x: 0.05, y: 0.05 }, tr: { x: 0.95, y: 0.05 }, br: { x: 0.95, y: 0.95 }, bl: { x: 0.05, y: 0.95 } })
+  const resetCrop = async () => {
+    // Re-run auto detection on reset (CamScanner-style: reset re-detects edges)
+    await handleAutoDetectCrop()
   }
 
   const rotateImage = (degrees: number) => {
@@ -2532,7 +2768,7 @@ function DocScannerPage() {
           <button onClick={() => { setEditingDoc(null); setCropMode(false); setCropCorners(null); setRotation(0); dragRef.current = null; setDraggingHandle(null) }} className="text-white flex items-center gap-1">
             <ChevronLeft className="w-5 h-5" />
           </button>
-          <h2 className="text-white font-semibold text-base">{cropMode ? (language === 'bn' ? 'বর্ডার সমন্বয়' : 'Border Adjustment') : (language === 'bn' ? 'স্ক্যান সম্পাদনা' : 'Edit Scan')}</h2>
+          <h2 className="text-white font-semibold text-base">{cropMode ? (detectingEdges ? (language === 'bn' ? 'সনাক্ত হচ্ছে...' : 'Detecting...') : (language === 'bn' ? 'বর্ডার সমন্বয়' : 'Border Adjustment')) : (language === 'bn' ? 'স্ক্যান সম্পাদনা' : 'Edit Scan')}</h2>
           {cropMode ? (
             <button onClick={applyCrop} className="text-white">
               <CheckCircle className="w-6 h-6" />
@@ -2562,6 +2798,15 @@ function DocScannerPage() {
             {/* Crop Overlay - positioned over the actual image */}
             {cropMode && (
               <>
+                {/* Auto-detection loading indicator */}
+                {detectingEdges && (
+                  <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/50 pointer-events-none">
+                    <div className="flex flex-col items-center gap-2 bg-black/80 px-6 py-4 rounded-2xl">
+                      <div className="w-8 h-8 border-3 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+                      <span className="text-emerald-300 text-sm font-medium">{language === 'bn' ? 'ডকুমেন্ট সনাক্ত হচ্ছে...' : 'Detecting document...'}</span>
+                    </div>
+                  </div>
+                )}
                 {/* Top dim */}
                 <div className="absolute pointer-events-none bg-black/60" style={{
                   top: 0, left: 0, right: 0,
@@ -2741,7 +2986,7 @@ function DocScannerPage() {
           <div className="flex items-center justify-around px-4 py-4 bg-emerald-700 shrink-0 safe-bottom">
             <button onClick={resetCrop} className="flex flex-col items-center gap-1 text-white/80 hover:text-white active:scale-95 transition-transform">
               <Grid3X3 className="w-5 h-5" />
-              <span className="text-[10px]">{language === 'bn' ? 'রিসেট' : 'Reset'}</span>
+              <span className="text-[10px]">{language === 'bn' ? 'অটো ডিটেক্ট' : 'Auto Detect'}</span>
             </button>
             <button onClick={applyCrop} className="flex flex-col items-center gap-1 text-white/80 hover:text-white active:scale-95 transition-transform">
               <FileEdit className="w-5 h-5" />
@@ -2782,7 +3027,7 @@ function DocScannerPage() {
             {/* Action buttons */}
             <div className="flex items-center gap-2 px-4 pb-4 pt-1">
               <Button
-                onClick={() => { setCropMode(true); setCropCorners({ ...defaultCorners }) }}
+                onClick={() => { setCropMode(true); handleAutoDetectCrop() }}
                 className="flex-1 bg-emerald-600 hover:bg-emerald-700"
               >
                 <FileEdit className="w-4 h-4 mr-1" /> {language === 'bn' ? 'ক্রপ' : 'Crop'}
