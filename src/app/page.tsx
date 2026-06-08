@@ -26,7 +26,8 @@ import {
   AlertCircle, FileText, Search, Moon, Sun, Download, Upload, Pencil,
   ChevronRight, MoreVertical, Star, StarOff, RefreshCw, Activity,
   PieChart, BarChart3, Users, Settings, HelpCircle, Info, ArrowRight,
-  Hash, IndianRupee, Scan, FileImage, FileEdit, FileType, Pause, Play, Grid3X3, List, History
+  Hash, IndianRupee, Scan, FileImage, FileEdit, FileType, Pause, Play, Grid3X3, List, History,
+  Smartphone, Share2, FolderOpen
 } from 'lucide-react'
 
 // ============ TYPES ============
@@ -1487,10 +1488,20 @@ function NoteCounterPage() {
   const [counts, setCounts] = useState<Record<string, number>>({
     '500': 0, '200': 0, '100': 0, '50': 0, '20': 0, '10': 0, '5': 0, '2': 0, '1': 0
   })
-  const [savedCounts, setSavedCounts] = useState<Array<{ id: string; date: string; counts: Record<string, number>; total: number }>>([])
+  const [savedCounts, setSavedCounts] = useState<Array<{ id: string; date: string; counts: Record<string, number>; total: number; category?: string; remark?: string; personName?: string; mobileNumber?: string; accountNumber?: string; entryType?: 'in' | 'out' }>>([])
   const [showSaved, setShowSaved] = useState(false)
   const [showCalc, setShowCalc] = useState(false)
   const [showCalcHistory, setShowCalcHistory] = useState(false)
+
+  // Extra entry fields (like the reference app)
+  const [category, setCategory] = useState('')
+  const [remark, setRemark] = useState('')
+  const [personName, setPersonName] = useState('')
+  const [mobileNumber, setMobileNumber] = useState('')
+  const [accountNumber, setAccountNumber] = useState('')
+  const [onlineAmount, setOnlineAmount] = useState(0)
+  const [otherPlus, setOtherPlus] = useState(0)
+  const [otherMinus, setOtherMinus] = useState(0)
 
   // Calculator state
   const [calcDisplay, setCalcDisplay] = useState('0')
@@ -1503,23 +1514,23 @@ function NoteCounterPage() {
   const [calcHistory, setCalcHistory] = useState<Array<{ id: string; expression: string; result: string; date: string; fromNoteCount?: boolean }>>([])
 
   const denominations = [
-    { value: 500, label: '₹500', labelBn: '৳৫০০', color: 'from-orange-400 to-orange-500' },
-    { value: 200, label: '₹200', labelBn: '৳২০০', color: 'from-yellow-400 to-yellow-500' },
-    { value: 100, label: '₹100', labelBn: '৳১০০', color: 'from-green-400 to-green-500' },
-    { value: 50, label: '₹50', labelBn: '৳৫০', color: 'from-teal-400 to-teal-500' },
-    { value: 20, label: '₹20', labelBn: '৳২০', color: 'from-blue-400 to-blue-500' },
-    { value: 10, label: '₹10', labelBn: '৳১০', color: 'from-purple-400 to-purple-500' },
-    { value: 5, label: '₹5', labelBn: '৳৫', color: 'from-pink-400 to-pink-500' },
-    { value: 2, label: '₹2', labelBn: '৳২', color: 'from-indigo-400 to-indigo-500' },
-    { value: 1, label: '₹1', labelBn: '৳১', color: 'from-gray-400 to-gray-500' },
+    { value: 500, label: '₹500', labelBn: '₹৫০০', color: '#FF6B35', textColor: '#fff' },
+    { value: 200, label: '₹200', labelBn: '₹২০০', color: '#FFB347', textColor: '#1a1a2e' },
+    { value: 100, label: '₹100', labelBn: '₹১০০', color: '#4CAF50', textColor: '#fff' },
+    { value: 50, label: '₹50', labelBn: '₹৫০', color: '#26A69A', textColor: '#fff' },
+    { value: 20, label: '₹20', labelBn: '₹২০', color: '#42A5F5', textColor: '#fff' },
+    { value: 10, label: '₹10', labelBn: '₹১০', color: '#AB47BC', textColor: '#fff' },
+    { value: 5, label: '₹5', labelBn: '₹৫', color: '#EC407A', textColor: '#fff' },
+    { value: 2, label: '₹2', labelBn: '₹২', color: '#5C6BC0', textColor: '#fff' },
+    { value: 1, label: '₹1', labelBn: '₹১', color: '#78909C', textColor: '#fff' },
   ]
 
   const resetCounts = { '500': 0, '200': 0, '100': 0, '50': 0, '20': 0, '10': 0, '5': 0, '2': 0, '1': 0 }
 
   const total = denominations.reduce((sum, d) => sum + (d.value * (counts[String(d.value)] || 0)), 0)
   const totalNotes = Object.values(counts).reduce((s, c) => s + c, 0)
+  const grandTotal = total + onlineAmount + otherPlus - otherMinus
 
-  // Load saved counts and calc history from localStorage
   useEffect(() => {
     try {
       const saved = localStorage.getItem('noteCounterSaved')
@@ -1537,8 +1548,8 @@ function NoteCounterPage() {
     localStorage.setItem('noteCounterCalcHistory', JSON.stringify(trimmed))
   }
 
-  const handleSave = () => {
-    if (total === 0) {
+  const handleSave = (entryType: 'in' | 'out') => {
+    if (total === 0 && onlineAmount === 0 && otherPlus === 0 && otherMinus === 0) {
       toast({ title: language === 'bn' ? 'খালি কাউন্ট' : 'Empty Count', description: language === 'bn' ? 'সেভ করার আগে কিছু নোট কাউন্ট করুন।' : 'Count some notes first before saving.', variant: 'destructive' })
       return
     }
@@ -1546,12 +1557,18 @@ function NoteCounterPage() {
       id: Date.now().toString(),
       date: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
       counts: { ...counts },
-      total
+      total: grandTotal,
+      category,
+      remark,
+      personName,
+      mobileNumber,
+      accountNumber,
+      entryType,
     }
     const updated = [newEntry, ...savedCounts].slice(0, 50)
     setSavedCounts(updated)
     localStorage.setItem('noteCounterSaved', JSON.stringify(updated))
-    toast({ title: language === 'bn' ? 'সেভ হয়েছে!' : 'Saved!', description: language === 'bn' ? `${formatCurrency(total)} সফলভাবে সেভ হয়েছে` : `Cash count of ${formatCurrency(total)} saved successfully.` })
+    toast({ title: language === 'bn' ? `সেভ হয়েছে! (${entryType === 'in' ? 'ইন' : 'আউট'})` : `Saved! (${entryType === 'in' ? 'In' : 'Out'})`, description: language === 'bn' ? `${formatCurrency(grandTotal)} সফলভাবে সেভ হয়েছে` : `Cash count of ${formatCurrency(grandTotal)} saved successfully.` })
   }
 
   const handleDelete = (id: string) => {
@@ -1562,7 +1579,7 @@ function NoteCounterPage() {
   }
 
   const handleShare = () => {
-    if (total === 0) {
+    if (total === 0 && onlineAmount === 0 && otherPlus === 0 && otherMinus === 0) {
       toast({ title: language === 'bn' ? 'খালি কাউন্ট' : 'Empty Count', description: language === 'bn' ? 'শেয়ার করার আগে কিছু নোট কাউন্ট করুন।' : 'Count some notes first before sharing.', variant: 'destructive' })
       return
     }
@@ -1572,9 +1589,16 @@ function NoteCounterPage() {
       const c = counts[String(d.value)] || 0
       if (c > 0) text += `${d.label} × ${c} = ${formatCurrency(d.value * c)}\n`
     })
+    if (onlineAmount > 0) text += `📱 Online: ${formatCurrency(onlineAmount)}\n`
+    if (otherPlus > 0) text += `➕ Other+: ${formatCurrency(otherPlus)}\n`
+    if (otherMinus > 0) text += `➖ Other-: ${formatCurrency(otherMinus)}\n`
     text += `━━━━━━━━━━━━━━━━━━\n`
     text += `📝 Total Notes: ${totalNotes}\n`
-    text += `💵 Total Cash: ${formatCurrency(total)}`
+    text += `💵 Total Cash: ${formatCurrency(total)}\n`
+    text += `💰 Grand Total: ${formatCurrency(grandTotal)}`
+    if (category) text += `\n📂 Category: ${category}`
+    if (remark) text += `\n📝 Remark: ${remark}`
+    if (personName) text += `\n👤 Person: ${personName}`
 
     if (navigator.share) {
       navigator.share({ title: 'Note Count', text })
@@ -1662,23 +1686,21 @@ function NoteCounterPage() {
   }
 
   const sendTotalToCalc = () => {
-    // Save note count total to history as a marker
     const newEntry = {
       id: Date.now().toString(),
-      expression: `${language === 'bn' ? 'নোট কাউন্ট থেকে' : 'From Note Count'} → ${formatCurrency(total)}`,
-      result: String(total),
+      expression: `${language === 'bn' ? 'নোট কাউন্ট থেকে' : 'From Note Count'} → ${formatCurrency(grandTotal)}`,
+      result: String(grandTotal),
       date: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
       fromNoteCount: true as const,
     }
     saveCalcHistory([newEntry, ...calcHistory])
-
-    setCalcDisplay(String(total))
+    setCalcDisplay(String(grandTotal))
     setCalcPrevious(null)
     setCalcOperation(null)
     setCalcExpression('')
     setCalcReset(true)
     setShowCalc(true)
-    toast({ title: language === 'bn' ? 'ক্যালকুলেটরে পাঠানো হয়েছে!' : 'Sent to Calculator!', description: language === 'bn' ? `${formatCurrency(total)} ক্যালকুলেটরে ট্রান্সফার হয়েছে` : `${formatCurrency(total)} transferred to calculator.` })
+    toast({ title: language === 'bn' ? 'ক্যালকুলেটরে পাঠানো হয়েছে!' : 'Sent to Calculator!', description: language === 'bn' ? `${formatCurrency(grandTotal)} ক্যালকুলেটরে ট্রান্সফার হয়েছে` : `${formatCurrency(grandTotal)} transferred to calculator.` })
   }
 
   const clearCalcHistory = () => {
@@ -1713,187 +1735,268 @@ function NoteCounterPage() {
     else if (val === '⌫') calcBackspace()
   }
 
+  const resetAll = () => {
+    setCounts({ ...resetCounts })
+    setOnlineAmount(0)
+    setOtherPlus(0)
+    setOtherMinus(0)
+    setCategory('')
+    setRemark('')
+    setPersonName('')
+    setMobileNumber('')
+    setAccountNumber('')
+  }
+
   return (
-    <div className="p-4 pb-24 space-y-4">
-      <Card className="border-0 shadow-md bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
-        <CardContent className="p-5 text-center">
-          <p className="text-amber-100 text-sm">{language === 'bn' ? 'মোট নগদ' : 'Total Cash'}</p>
-          <p className="text-4xl font-bold mt-1">{formatCurrency(total)}</p>
-          <p className="text-amber-200 text-sm mt-1">{totalNotes} {language === 'bn' ? 'টি নোট' : 'notes'}</p>
-          {/* Send total to calculator */}
-          {total > 0 && (
-            <Button size="sm" variant="secondary" className="mt-3 bg-white/20 hover:bg-white/30 text-white border-0" onClick={sendTotalToCalc}>
-              <Calculator className="w-4 h-4 mr-1" /> {language === 'bn' ? 'ক্যালকুলেটরে পাঠান' : 'Send to Calculator'}
-            </Button>
-          )}
-        </CardContent>
-      </Card>
+    <div className="pb-28 bg-[#0d1117] min-h-screen">
+      {/* ===== HEADER - Dark green like reference app ===== */}
+      <div className="bg-[#006633] px-4 py-3 flex items-center justify-between sticky top-0 z-30">
+        <h1 className="text-white font-bold text-lg">{language === 'bn' ? 'নোট কাউন্টার' : 'Note Counter'}</h1>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowCalc(!showCalc)} className="text-white/80 hover:text-white p-1.5" title={language === 'bn' ? 'ক্যালকুলেটর' : 'Calculator'}>
+            <Calculator className="w-5 h-5" />
+          </button>
+          <button onClick={handleShare} className="text-white/80 hover:text-white p-1.5" title={language === 'bn' ? 'শেয়ার' : 'Share'}>
+            <Share2 className="w-5 h-5" />
+          </button>
+          <button onClick={resetAll} className="text-white/80 hover:text-white p-1.5" title={language === 'bn' ? 'রিসেট' : 'Reset'}>
+            <Trash2 className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
 
-      {/* Built-in Calculator */}
-      {showCalc && (
-        <Card className="border-0 shadow-md overflow-hidden">
-          <div className="flex items-center justify-between p-3 bg-gray-900">
-            <div className="flex items-center gap-2">
-              <Calculator className="w-4 h-4 text-emerald-400" />
-              <span className="text-gray-300 text-sm font-medium">{language === 'bn' ? 'ক্যালকুলেটর' : 'Calculator'}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setShowCalcHistory(!showCalcHistory)} className={`text-gray-400 hover:text-white p-1 transition-colors ${showCalcHistory ? 'text-emerald-400' : ''}`} title={language === 'bn' ? 'ইতিহাস' : 'History'}>
-                <History className="w-4 h-4" />
-              </button>
-              <button onClick={() => setShowCalc(false)} className="text-gray-400 hover:text-white p-1">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+      {/* ===== SUMMARY BAR ===== */}
+      <div className="bg-[#1a1a2e] border-b border-emerald-800/50 px-4 py-2 flex items-center justify-between sticky top-[52px] z-20">
+        <div className="flex items-center gap-3">
+          <div className="bg-[#2d2d44] px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+            <span className="text-gray-400 text-xs font-medium">N</span>
+            <span className="text-yellow-400 font-bold text-lg">{totalNotes}</span>
           </div>
+          <div className="bg-[#2d2d44] px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+            <span className="text-yellow-500 text-xs font-bold">₹</span>
+            <span className="text-yellow-400 font-bold text-lg">{grandTotal.toLocaleString('en-IN')}</span>
+          </div>
+        </div>
+        {total > 0 && (
+          <button onClick={sendTotalToCalc} className="text-emerald-400 text-xs font-medium px-2 py-1 border border-emerald-600/50 rounded-lg hover:bg-emerald-900/30 transition-colors">
+            → {language === 'bn' ? 'ক্যালক' : 'Calc'}
+          </button>
+        )}
+      </div>
 
-          {/* Calculation History */}
-          {showCalcHistory && (
-            <div className="bg-gray-800 border-t border-gray-700 max-h-48 overflow-y-auto">
-              <div className="flex items-center justify-between p-2 px-3 sticky top-0 bg-gray-800 z-10">
-                <span className="text-gray-400 text-xs font-medium">{language === 'bn' ? 'ইতিহাস' : 'History'} ({calcHistory.length})</span>
-                {calcHistory.length > 0 && (
-                  <button onClick={clearCalcHistory} className="text-red-400 hover:text-red-300 text-xs">{language === 'bn' ? 'মুছুন' : 'Clear'}</button>
+      {/* ===== NOTE ROWS - Dark theme like reference ===== */}
+      <div className="px-3 pt-2 space-y-1.5">
+        {denominations.map(d => {
+          const count = counts[String(d.value)] || 0
+          const subtotal = d.value * count
+          return (
+            <div key={d.value} className="flex items-center gap-2 bg-[#1a1a2e] rounded-lg border border-emerald-900/40 overflow-hidden">
+              <div className="w-14 h-11 flex items-center justify-center font-bold text-sm shrink-0" style={{ backgroundColor: d.color, color: d.textColor }}>
+                {language === 'bn' ? d.labelBn : d.label}
+              </div>
+              <div className="flex-1 flex items-center gap-1 px-1">
+                <span className="text-gray-400 text-xs">×</span>
+                <button onClick={() => setCounts({ ...counts, [d.value]: Math.max(0, count - 1) })} className="w-7 h-7 rounded-full bg-red-900/60 text-red-400 flex items-center justify-center text-sm font-bold active:scale-90 transition-transform border border-red-700/40">−</button>
+                <input type="number" value={count || ''} placeholder="0" onChange={e => setCounts({ ...counts, [d.value]: parseInt(e.target.value) || 0 })} className="w-10 h-8 text-center bg-[#0d1117] text-white text-sm font-medium rounded border border-gray-700 focus:border-emerald-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" min={0} />
+                <button onClick={() => setCounts({ ...counts, [d.value]: count + 1 })} className="w-7 h-7 rounded-full bg-emerald-900/60 text-emerald-400 flex items-center justify-center text-sm font-bold active:scale-90 transition-transform border border-emerald-700/40">+</button>
+              </div>
+              <div className="w-20 text-right pr-3 shrink-0">
+                <span className="text-yellow-400 text-sm font-bold">{subtotal > 0 ? formatCurrency(subtotal) : ''}</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* ===== ONLINE AMOUNT ===== */}
+      <div className="px-3 pt-3">
+        <div className="bg-[#1a1a2e] rounded-lg border border-emerald-900/40 p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <Smartphone className="w-4 h-4 text-blue-400" />
+            <span className="text-gray-300 text-sm font-medium">{language === 'bn' ? 'অনলাইন অ্যামাউন্ট' : 'Online Amount'}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setOnlineAmount(Math.max(0, onlineAmount - 100))} className="w-7 h-7 rounded-full bg-red-900/60 text-red-400 flex items-center justify-center text-sm font-bold active:scale-90 transition-transform border border-red-700/40">−</button>
+            <input type="number" value={onlineAmount || ''} placeholder="0" onChange={e => setOnlineAmount(parseInt(e.target.value) || 0)} className="flex-1 h-8 text-center bg-[#0d1117] text-white text-sm font-medium rounded border border-gray-700 focus:border-blue-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" min={0} />
+            <button onClick={() => setOnlineAmount(onlineAmount + 100)} className="w-7 h-7 rounded-full bg-emerald-900/60 text-emerald-400 flex items-center justify-center text-sm font-bold active:scale-90 transition-transform border border-emerald-700/40">+</button>
+            <span className="text-blue-400 text-sm font-bold w-20 text-right">{onlineAmount > 0 ? formatCurrency(onlineAmount) : ''}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ===== OTHER PLUS / MINUS ===== */}
+      <div className="px-3 pt-2 flex gap-2">
+        <div className="flex-1 bg-[#1a1a2e] rounded-lg border border-emerald-900/40 p-2.5">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-emerald-400 text-xs font-medium">{language === 'bn' ? 'অন্যান্য +' : 'Other + ₹'}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => setOtherPlus(Math.max(0, otherPlus - 50))} className="w-6 h-6 rounded-full bg-red-900/60 text-red-400 flex items-center justify-center text-xs font-bold active:scale-90 transition-transform border border-red-700/40">−</button>
+            <input type="number" value={otherPlus || ''} placeholder="0" onChange={e => setOtherPlus(parseInt(e.target.value) || 0)} className="flex-1 h-7 text-center bg-[#0d1117] text-white text-xs font-medium rounded border border-gray-700 focus:border-emerald-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" min={0} />
+            <button onClick={() => setOtherPlus(otherPlus + 50)} className="w-6 h-6 rounded-full bg-emerald-900/60 text-emerald-400 flex items-center justify-center text-xs font-bold active:scale-90 transition-transform border border-emerald-700/40">+</button>
+          </div>
+        </div>
+        <div className="flex-1 bg-[#1a1a2e] rounded-lg border border-emerald-900/40 p-2.5">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-red-400 text-xs font-medium">{language === 'bn' ? 'অন্যান্য −' : 'Other − ₹'}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => setOtherMinus(Math.max(0, otherMinus - 50))} className="w-6 h-6 rounded-full bg-red-900/60 text-red-400 flex items-center justify-center text-xs font-bold active:scale-90 transition-transform border border-red-700/40">−</button>
+            <input type="number" value={otherMinus || ''} placeholder="0" onChange={e => setOtherMinus(parseInt(e.target.value) || 0)} className="flex-1 h-7 text-center bg-[#0d1117] text-white text-xs font-medium rounded border border-gray-700 focus:border-red-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" min={0} />
+            <button onClick={() => setOtherMinus(otherMinus + 50)} className="w-6 h-6 rounded-full bg-emerald-900/60 text-emerald-400 flex items-center justify-center text-xs font-bold active:scale-90 transition-transform border border-emerald-700/40">+</button>
+          </div>
+        </div>
+      </div>
+
+      {/* ===== ENTRY DETAILS ===== */}
+      <div className="px-3 pt-2">
+        <div className="bg-[#1a1a2e] rounded-lg border border-emerald-900/40 p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <FileText className="w-4 h-4 text-emerald-400" />
+            <span className="text-gray-300 text-sm font-medium">{language === 'bn' ? 'এন্ট্রি বিবরণ' : 'Entry Details'}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <input value={category} onChange={e => setCategory(e.target.value)} placeholder={language === 'bn' ? 'ক্যাটাগরি' : 'Category'} className="h-8 px-2 text-sm bg-[#0d1117] text-white rounded border border-gray-700 focus:border-emerald-500 focus:outline-none placeholder:text-gray-600" />
+            <input value={remark} onChange={e => setRemark(e.target.value)} placeholder={language === 'bn' ? 'রিমার্ক' : 'Remark'} className="h-8 px-2 text-sm bg-[#0d1117] text-white rounded border border-gray-700 focus:border-emerald-500 focus:outline-none placeholder:text-gray-600" />
+            <input value={personName} onChange={e => setPersonName(e.target.value)} placeholder={language === 'bn' ? 'ব্যক্তির নাম' : 'Person Name'} className="h-8 px-2 text-sm bg-[#0d1117] text-white rounded border border-gray-700 focus:border-emerald-500 focus:outline-none placeholder:text-gray-600" />
+            <input value={mobileNumber} onChange={e => setMobileNumber(e.target.value)} placeholder={language === 'bn' ? 'মোবাইল নম্বর' : 'Mobile Number'} className="h-8 px-2 text-sm bg-[#0d1117] text-white rounded border border-gray-700 focus:border-emerald-500 focus:outline-none placeholder:text-gray-600" />
+          </div>
+          <input value={accountNumber} onChange={e => setAccountNumber(e.target.value)} placeholder={language === 'bn' ? 'অ্যাকাউন্ট নম্বর' : 'Account Number'} className="w-full h-8 px-2 text-sm bg-[#0d1117] text-white rounded border border-gray-700 focus:border-emerald-500 focus:outline-none placeholder:text-gray-600" />
+        </div>
+      </div>
+
+      {/* ===== GRAND TOTAL ===== */}
+      <div className="px-3 pt-2">
+        <div className="bg-gradient-to-r from-amber-600 to-yellow-500 rounded-lg p-3 flex items-center justify-between">
+          <div>
+            <p className="text-amber-100 text-xs">{language === 'bn' ? 'গ্র্যান্ড টোটাল' : 'GRAND TOTAL'}</p>
+            <p className="text-white text-2xl font-bold">{formatCurrency(grandTotal)}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-amber-100 text-xs">{language === 'bn' ? 'নোট + অনলাইন + অন্যান্য' : 'Cash + Online + Other'}</p>
+            <p className="text-white/80 text-xs">{formatCurrency(total)} + {formatCurrency(onlineAmount)} + {formatCurrency(otherPlus)} − {formatCurrency(otherMinus)}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ===== ACTION BUTTONS ===== */}
+      <div className="px-3 pt-3 grid grid-cols-3 gap-2">
+        <button onClick={() => handleSave('in')} className="bg-[#2e7d32] hover:bg-[#388e3c] text-white py-3 rounded-lg font-bold text-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-lg">
+          <Download className="w-4 h-4" /> {language === 'bn' ? 'সেভ ইন' : 'Save In'}
+        </button>
+        <button onClick={() => setShowSaved(!showSaved)} className="bg-[#6d4c41] hover:bg-[#795548] text-white py-3 rounded-lg font-bold text-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-lg">
+          <Eye className="w-4 h-4" /> {language === 'bn' ? 'এন্ট্রি দেখুন' : 'View Entry'}
+        </button>
+        <button onClick={() => handleSave('out')} className="bg-[#c62828] hover:bg-[#d32f2f] text-white py-3 rounded-lg font-bold text-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-lg">
+          <Upload className="w-4 h-4" /> {language === 'bn' ? 'সেভ আউট' : 'Save Out'}
+        </button>
+      </div>
+
+      {/* ===== CALCULATOR ===== */}
+      {showCalc && (
+        <div className="px-3 pt-3">
+          <div className="rounded-xl overflow-hidden border border-gray-800">
+            <div className="flex items-center justify-between p-3 bg-gray-900">
+              <div className="flex items-center gap-2">
+                <Calculator className="w-4 h-4 text-emerald-400" />
+                <span className="text-gray-300 text-sm font-medium">{language === 'bn' ? 'ক্যালকুলেটর' : 'Calculator'}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowCalcHistory(!showCalcHistory)} className={`text-gray-400 hover:text-white p-1 transition-colors ${showCalcHistory ? 'text-emerald-400' : ''}`}><History className="w-4 h-4" /></button>
+                <button onClick={() => setShowCalc(false)} className="text-gray-400 hover:text-white p-1"><X className="w-4 h-4" /></button>
+              </div>
+            </div>
+            {showCalcHistory && (
+              <div className="bg-gray-800 border-t border-gray-700 max-h-48 overflow-y-auto">
+                <div className="flex items-center justify-between p-2 px-3 sticky top-0 bg-gray-800 z-10">
+                  <span className="text-gray-400 text-xs font-medium">{language === 'bn' ? 'ইতিহাস' : 'History'} ({calcHistory.length})</span>
+                  {calcHistory.length > 0 && <button onClick={clearCalcHistory} className="text-red-400 hover:text-red-300 text-xs">{language === 'bn' ? 'মুছুন' : 'Clear'}</button>}
+                </div>
+                {calcHistory.length === 0 ? (
+                  <p className="text-gray-500 text-xs text-center py-4">{language === 'bn' ? 'এখনও কোনো ক্যালকুলেশন নেই' : 'No calculations yet'}</p>
+                ) : (
+                  <div className="space-y-1 px-2 pb-2">
+                    {calcHistory.map(entry => (
+                      <button key={entry.id} onClick={() => applyHistoryResult(entry.result)} className="w-full text-right p-2 rounded-lg hover:bg-gray-700 transition-colors group">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1">{entry.fromNoteCount && <span className="text-[10px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full">{language === 'bn' ? 'নোট' : 'Note'}</span>}</div>
+                          <p className="text-gray-500 text-[10px]">{entry.date}</p>
+                        </div>
+                        <p className="text-gray-400 text-xs">{entry.expression}</p>
+                        <p className="text-emerald-400 text-sm font-medium group-hover:text-emerald-300">= {formatCurrency(parseFloat(entry.result))}</p>
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
-              {calcHistory.length === 0 ? (
-                <p className="text-gray-500 text-xs text-center py-4">{language === 'bn' ? 'এখনও কোনো ক্যালকুলেশন নেই' : 'No calculations yet'}</p>
-              ) : (
-                <div className="space-y-1 px-2 pb-2">
-                  {calcHistory.map(entry => (
-                    <button key={entry.id} onClick={() => applyHistoryResult(entry.result)}
-                      className="w-full text-right p-2 rounded-lg hover:bg-gray-700 transition-colors group">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1">
-                          {entry.fromNoteCount && <span className="text-[10px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full">{language === 'bn' ? 'নোট' : 'Note'}</span>}
-                        </div>
-                        <p className="text-gray-500 text-[10px]">{entry.date}</p>
-                      </div>
-                      <p className="text-gray-400 text-xs">{entry.expression}</p>
-                      <p className="text-emerald-400 text-sm font-medium group-hover:text-emerald-300">= {formatCurrency(parseFloat(entry.result))}</p>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="bg-gray-900 p-4 pt-3">
-            <div className="text-right mb-4 p-3 bg-gray-800 rounded-xl">
-              {calcExpression && <p className="text-gray-400 text-sm h-5 truncate">{calcExpression}</p>}
-              {!calcExpression && calcOperation && calcPrevious && <p className="text-gray-400 text-sm h-5 truncate">{formatCurrency(parseFloat(calcPrevious))} {calcOperation}</p>}
-              <p className="text-white text-3xl font-light truncate">{calcDisplay.includes('.') ? calcDisplay : formatCurrency(parseFloat(calcDisplay))}</p>
-            </div>
-            <div className="grid grid-cols-4 gap-2">
-              {calcButtons.map((row, ri) => (
-                row.map((btn, ci) => {
-                  const isOp = ['+', '-', '×', '÷', '='].includes(btn)
-                  const isFunc = ['C', '⌫', '%'].includes(btn)
-                  const isActiveOp = calcOperation === btn && calcReset
-                  return (
-                    <button key={`${ri}-${ci}`} onClick={() => calcHandleButton(btn)}
-                      className={`h-12 rounded-xl text-lg font-medium transition-all active:scale-95
-                        ${btn === '0' ? 'col-span-2' : ''}
-                        ${isOp ? (isActiveOp ? 'bg-emerald-300 text-gray-900' : 'bg-emerald-500 text-white hover:bg-emerald-600') : isFunc ? 'bg-gray-600 text-white hover:bg-gray-500' : 'bg-gray-700 text-white hover:bg-gray-600'}`}>
-                      {btn}
-                    </button>
-                  )
-                })
-              ))}
+            )}
+            <div className="bg-gray-900 p-4 pt-3">
+              <div className="text-right mb-4 p-3 bg-gray-800 rounded-xl">
+                {calcExpression && <p className="text-gray-400 text-sm h-5 truncate">{calcExpression}</p>}
+                {!calcExpression && calcOperation && calcPrevious && <p className="text-gray-400 text-sm h-5 truncate">{formatCurrency(parseFloat(calcPrevious))} {calcOperation}</p>}
+                <p className="text-white text-3xl font-light truncate">{calcDisplay.includes('.') ? calcDisplay : formatCurrency(parseFloat(calcDisplay))}</p>
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                {calcButtons.map((row, ri) => (
+                  row.map((btn, ci) => {
+                    const isOp = ['+', '-', '×', '÷', '='].includes(btn)
+                    const isFunc = ['C', '⌫', '%'].includes(btn)
+                    const isActiveOp = calcOperation === btn && calcReset
+                    return (
+                      <button key={`${ri}-${ci}`} onClick={() => calcHandleButton(btn)}
+                        className={`h-12 rounded-xl text-lg font-medium transition-all active:scale-95 ${btn === '0' ? 'col-span-2' : ''} ${isOp ? (isActiveOp ? 'bg-emerald-300 text-gray-900' : 'bg-emerald-500 text-white hover:bg-emerald-600') : isFunc ? 'bg-gray-600 text-white hover:bg-gray-500' : 'bg-gray-700 text-white hover:bg-gray-600'}`}>
+                        {btn}
+                      </button>
+                    )
+                  })
+                ))}
+              </div>
             </div>
           </div>
-        </Card>
-      )}
-
-      {/* Calculator toggle when hidden */}
-      {!showCalc && (
-        <div className="flex gap-2">
-          <Button variant="outline" className="flex-1" onClick={() => setShowCalc(true)}>
-            <Calculator className="w-4 h-4 mr-2" /> {language === 'bn' ? 'ক্যালকুলেটর খুলুন' : 'Open Calculator'}
-          </Button>
-          {total > 0 && (
-            <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={sendTotalToCalc}>
-              <ArrowRight className="w-4 h-4" />
-            </Button>
-          )}
         </div>
       )}
 
-      <div className="space-y-2">
-        {denominations.map(d => (
-          <div key={d.value} className="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 rounded-xl shadow-sm">
-            <div className={`w-16 h-10 bg-gradient-to-r ${d.color} rounded-lg flex items-center justify-center text-white text-sm font-bold`}>
-              {language === 'bn' ? d.labelBn : d.label}
+      {/* ===== SAVED ENTRIES ===== */}
+      {showSaved && (
+        <div className="px-3 pt-3">
+          <div className="bg-[#1a1a2e] rounded-lg border border-emerald-900/40 overflow-hidden">
+            <div className="flex items-center justify-between p-3 border-b border-gray-800">
+              <div className="flex items-center gap-2">
+                <FolderOpen className="w-4 h-4 text-emerald-400" />
+                <span className="text-gray-300 text-sm font-medium">{language === 'bn' ? 'সেভ করা এন্ট্রি' : 'Saved Entries'} ({savedCounts.length})</span>
+              </div>
+              <button onClick={() => setShowSaved(false)} className="text-gray-500 hover:text-white p-1"><X className="w-4 h-4" /></button>
             </div>
-            <div className="flex items-center gap-2 flex-1">
-              <button onClick={() => setCounts({ ...counts, [d.value]: Math.max(0, (counts[String(d.value)] || 0) - 1) })} className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center text-red-600 font-bold">-</button>
-              <Input type="number" value={counts[String(d.value)] || 0} onChange={e => setCounts({ ...counts, [d.value]: parseInt(e.target.value) || 0 })} className="w-16 text-center" min={0} />
-              <button onClick={() => setCounts({ ...counts, [d.value]: (counts[String(d.value)] || 0) + 1 })} className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center text-green-600 font-bold">+</button>
-            </div>
-            <p className="text-sm font-semibold w-24 text-right">{formatCurrency(d.value * (counts[String(d.value)] || 0))}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Action Buttons */}
-      <div className="grid grid-cols-3 gap-2">
-        <Button variant="outline" className="w-full" onClick={() => setCounts({ ...resetCounts })}>
-          <RefreshCw className="w-4 h-4 mr-1" /> {language === 'bn' ? 'রিসেট' : 'Reset'}
-        </Button>
-        <Button className="w-full bg-emerald-600 hover:bg-emerald-700" onClick={handleSave}>
-          <Download className="w-4 h-4 mr-1" /> {language === 'bn' ? 'সেভ' : 'Save'}
-        </Button>
-        <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={handleShare}>
-          <Upload className="w-4 h-4 mr-1" /> {language === 'bn' ? 'শেয়ার' : 'Share'}
-        </Button>
-      </div>
-
-      {/* Saved Counts */}
-      <Card className="shadow-md">
-        <CardHeader className="pb-2 cursor-pointer" onClick={() => setShowSaved(!showSaved)}>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base">{language === 'bn' ? 'সেভ করা কাউন্ট' : 'Saved Counts'} ({savedCounts.length})</CardTitle>
-            {showSaved ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
-          </div>
-        </CardHeader>
-        {showSaved && (
-          <CardContent className="space-y-2">
             {savedCounts.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-4">{language === 'bn' ? 'এখনও কোনো সেভ করা কাউন্ট নেই। কাউন্ট করে সেভ করুন!' : 'No saved counts yet. Count and save!'}</p>
+              <p className="text-gray-500 text-sm text-center py-6">{language === 'bn' ? 'এখনও কোনো সেভ করা এন্ট্রি নেই' : 'No saved entries yet'}</p>
             ) : (
-              savedCounts.map(entry => (
-                <div key={entry.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                  <div>
-                    <p className="text-sm font-semibold">{formatCurrency(entry.total)}</p>
-                    <p className="text-xs text-gray-500">{entry.date}</p>
+              <div className="divide-y divide-gray-800/60">
+                {savedCounts.map(entry => (
+                  <div key={entry.id} className="p-3 hover:bg-[#252540] transition-colors">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${entry.entryType === 'in' ? 'bg-emerald-900/60 text-emerald-400' : 'bg-red-900/60 text-red-400'}`}>
+                          {entry.entryType === 'in' ? (language === 'bn' ? 'ইন' : 'IN') : (language === 'bn' ? 'আউট' : 'OUT')}
+                        </span>
+                        <span className="text-yellow-400 font-bold text-sm">{formatCurrency(entry.total)}</span>
+                      </div>
+                      <div className="flex gap-1">
+                        <button onClick={() => handleShareSaved(entry)} className="p-1.5 text-blue-400 hover:bg-blue-900/30 rounded"><Share2 className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => handleDelete(entry.id)} className="p-1.5 text-red-400 hover:bg-red-900/30 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px] text-gray-500">
+                      <span>{entry.date}</span>
+                      {entry.category && <span>• {entry.category}</span>}
+                      {entry.personName && <span>• {entry.personName}</span>}
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => {
-                      const newHistEntry = {
-                        id: Date.now().toString(),
-                        expression: `${language === 'bn' ? 'নোট কাউন্ট থেকে' : 'From Note Count'} → ${formatCurrency(entry.total)}`,
-                        result: String(entry.total),
-                        date: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
-                        fromNoteCount: true as const,
-                      }
-                      saveCalcHistory([newHistEntry, ...calcHistory])
-                      setCalcDisplay(String(entry.total)); setCalcReset(true); setShowCalc(true)
-                    }} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg" title={language === 'bn' ? 'ক্যালকুলেটরে পাঠান' : 'Send to Calculator'}>
-                      <Calculator className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => handleShareSaved(entry)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Share">
-                      <Upload className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => handleDelete(entry.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Delete">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))
+                ))}
+              </div>
             )}
-          </CardContent>
-        )}
-      </Card>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
