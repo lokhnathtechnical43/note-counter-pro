@@ -2025,6 +2025,15 @@ function ToolsPage() {
   const { setPage } = useAppStore()
   const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [converting, setConverting] = useState(false)
+  const [convertedImages, setConvertedImages] = useState<string[]>([])
+  const [editPdfFile, setEditPdfFile] = useState<File | null>(null)
+  const [editPdfImages, setEditPdfImages] = useState<string[]>([])
+  const [editCurrentPage, setEditCurrentPage] = useState(0)
+  const [editAnnotations, setEditAnnotations] = useState<Array<{ page: number; x: number; y: number; text: string; color: string }>>([])
+  const [editTextInput, setEditTextInput] = useState('')
+  const [editTextColor, setEditTextColor] = useState('#ff0000')
+  const [showTextInput, setShowTextInput] = useState(false)
+  const [textPosition, setTextPosition] = useState({ x: 0, y: 0 })
 
   const tools = [
     { icon: <FileImage className="w-6 h-6" />, label: 'PDF to JPEG', desc: 'Convert PDF pages to images', color: 'from-red-400 to-orange-400' },
@@ -2037,9 +2046,156 @@ function ToolsPage() {
     { icon: <Bell className="w-6 h-6" />, label: 'Alarm', desc: 'Set alarms', color: 'from-yellow-400 to-amber-500', page: 'alarm' as Page },
   ]
 
-  const handlePdfConvert = () => {
+  // PDF to JPEG - Real conversion using canvas
+  const handlePdfConvert = async () => {
     if (!pdfFile) return
-    toast({ title: 'PDF Conversion', description: 'PDF processing is simulated in this environment. In production, this would use a PDF library to convert pages to JPEG images.' })
+    setConverting(true)
+    setConvertedImages([])
+    try {
+      const arrayBuffer = await pdfFile.arrayBuffer()
+      const pdfjsLib = await import('pdfjs-dist')
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
+      
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+      const images: string[] = []
+      
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i)
+        const scale = 2
+        const viewport = page.getViewport({ scale })
+        
+        const canvas = document.createElement('canvas')
+        canvas.width = viewport.width
+        canvas.height = viewport.height
+        const ctx = canvas.getContext('2d')!
+        
+        await page.render({ canvasContext: ctx, viewport, canvas } as any).promise
+        images.push(canvas.toDataURL('image/jpeg', 0.9))
+      }
+      
+      setConvertedImages(images)
+      toast({ title: 'Conversion Complete!', description: `${images.length} page(s) converted to JPEG.` })
+    } catch (err) {
+      console.error('PDF conversion error:', err)
+      toast({ title: 'Conversion Failed', description: 'Could not convert PDF. Please try a different file.', variant: 'destructive' })
+    }
+    setConverting(false)
+  }
+
+  const downloadImage = (dataUrl: string, index: number) => {
+    const link = document.createElement('a')
+    link.href = dataUrl
+    link.download = `${pdfFile?.name?.replace('.pdf', '') || 'page'}_${index + 1}.jpg`
+    link.click()
+  }
+
+  const downloadAllImages = () => {
+    convertedImages.forEach((img, i) => {
+      setTimeout(() => downloadImage(img, i), i * 300)
+    })
+  }
+
+  // PDF Editor - Load and annotate
+  const handleEditPdf = async () => {
+    if (!editPdfFile) return
+    try {
+      const arrayBuffer = await editPdfFile.arrayBuffer()
+      const pdfjsLib = await import('pdfjs-dist')
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
+      
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+      const images: string[] = []
+      
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i)
+        const scale = 2
+        const viewport = page.getViewport({ scale })
+        
+        const canvas = document.createElement('canvas')
+        canvas.width = viewport.width
+        canvas.height = viewport.height
+        const ctx = canvas.getContext('2d')!
+        
+        await page.render({ canvasContext: ctx, viewport, canvas } as any).promise
+        images.push(canvas.toDataURL('image/jpeg', 0.9))
+      }
+      
+      setEditPdfImages(images)
+      setEditCurrentPage(0)
+      setEditAnnotations([])
+      toast({ title: 'PDF Loaded', description: `${images.length} page(s) loaded for editing.` })
+    } catch (err) {
+      console.error('PDF editor error:', err)
+      toast({ title: 'Load Failed', description: 'Could not load PDF for editing.', variant: 'destructive' })
+    }
+  }
+
+  const handleCanvasClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    setTextPosition({ x, y })
+    setShowTextInput(true)
+    setEditTextInput('')
+  }
+
+  const addTextAnnotation = () => {
+    if (!editTextInput.trim()) return
+    setEditAnnotations([...editAnnotations, {
+      page: editCurrentPage,
+      x: textPosition.x,
+      y: textPosition.y,
+      text: editTextInput,
+      color: editTextColor
+    }])
+    setShowTextInput(false)
+    setEditTextInput('')
+  }
+
+  const deleteAnnotation = (index: number) => {
+    setEditAnnotations(editAnnotations.filter((_, i) => i !== index))
+  }
+
+  const saveEditedPdf = async () => {
+    try {
+      const pdfjsLib = await import('pdfjs-dist')
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
+
+      // Render each page with annotations to canvas, then create downloadable images
+      for (let p = 0; p < editPdfImages.length; p++) {
+        const img = new Image()
+        img.src = editPdfImages[p]
+        await new Promise(resolve => { img.onload = resolve })
+        
+        const canvas = document.createElement('canvas')
+        canvas.width = img.width
+        canvas.height = img.height
+        const ctx = canvas.getContext('2d')!
+        ctx.drawImage(img, 0, 0)
+        
+        // Draw annotations for this page
+        const pageAnnotations = editAnnotations.filter(a => a.page === p)
+        const scaleX = img.width / (img.naturalWidth || img.width)
+        const scaleY = img.height / (img.naturalHeight || img.height)
+        
+        pageAnnotations.forEach(ann => {
+          ctx.font = `bold ${Math.round(20 * scaleX)}px Arial`
+          ctx.fillStyle = ann.color
+          ctx.fillText(ann.text, ann.x * scaleX, ann.y * scaleY)
+        })
+        
+        // Download
+        const link = document.createElement('a')
+        link.href = canvas.toDataURL('image/jpeg', 0.95)
+        link.download = `edited_page_${p + 1}.jpg`
+        link.click()
+      }
+      
+      toast({ title: 'Saved!', description: 'Edited pages downloaded.' })
+    } catch (err) {
+      console.error('Save error:', err)
+      toast({ title: 'Save Failed', description: 'Could not save edited PDF.', variant: 'destructive' })
+    }
   }
 
   return (
@@ -2067,11 +2223,43 @@ function ToolsPage() {
           <CardTitle className="text-lg flex items-center gap-2"><FileImage className="w-5 h-5 text-red-500" /> PDF to JPEG</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Input type="file" accept=".pdf" onChange={e => setPdfFile(e.target.files?.[0] || null)} />
-          {pdfFile && <p className="text-sm text-muted-foreground">Selected: {pdfFile.name} ({(pdfFile.size / 1024).toFixed(1)} KB)</p>}
-          <Button onClick={handlePdfConvert} disabled={!pdfFile || converting} className="w-full">
-            {converting ? 'Converting...' : 'Convert to JPEG'}
+          <div className="border-2 border-dashed rounded-xl p-4 text-center">
+            <Input type="file" accept=".pdf" onChange={e => { setPdfFile(e.target.files?.[0] || null); setConvertedImages([]) }} />
+            {pdfFile && (
+              <div className="mt-3 p-2 bg-gray-50 dark:bg-gray-700 rounded-lg flex items-center justify-between">
+                <div className="text-left">
+                  <p className="text-sm font-medium">{pdfFile.name}</p>
+                  <p className="text-xs text-muted-foreground">{(pdfFile.size / 1024).toFixed(1)} KB</p>
+                </div>
+                <Button size="sm" onClick={() => { setPdfFile(null); setConvertedImages([]) }} variant="ghost"><X className="w-4 h-4" /></Button>
+              </div>
+            )}
+          </div>
+          <Button onClick={handlePdfConvert} disabled={!pdfFile || converting} className="w-full bg-red-500 hover:bg-red-600">
+            {converting ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Converting...</> : <><FileImage className="w-4 h-4 mr-2" /> Convert to JPEG</>}
           </Button>
+          
+          {convertedImages.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium">Converted Pages ({convertedImages.length})</p>
+                <Button size="sm" variant="outline" onClick={downloadAllImages}><Download className="w-4 h-4 mr-1" /> Download All</Button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {convertedImages.map((img, i) => (
+                  <div key={i} className="relative group">
+                    <img src={img} alt={`Page ${i + 1}`} className="w-full rounded-lg border shadow-sm" />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
+                      <Button size="sm" variant="secondary" onClick={() => downloadImage(img, i)}>
+                        <Download className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <span className="absolute top-1 left-1 bg-black/60 text-white text-xs px-2 py-0.5 rounded">Page {i + 1}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -2080,14 +2268,89 @@ function ToolsPage() {
         <CardHeader className="pb-2">
           <CardTitle className="text-lg flex items-center gap-2"><FileEdit className="w-5 h-5 text-blue-500" /> PDF Editor</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="border-2 border-dashed rounded-xl p-8 text-center">
-            <FileType className="w-10 h-10 text-muted-foreground mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">Upload a PDF to edit</p>
-            <Input type="file" accept=".pdf" className="mt-3" onChange={() => {
-              toast({ title: 'PDF Editor', description: 'PDF editing would open an in-browser editor. Available in production with PDF.js integration.' })
-            }} />
+        <CardContent className="space-y-3">
+          <div className="border-2 border-dashed rounded-xl p-4 text-center">
+            <Input type="file" accept=".pdf" onChange={e => { setEditPdfFile(e.target.files?.[0] || null); setEditPdfImages([]) }} />
+            {editPdfFile && (
+              <div className="mt-3 p-2 bg-gray-50 dark:bg-gray-700 rounded-lg flex items-center justify-between">
+                <div className="text-left">
+                  <p className="text-sm font-medium">{editPdfFile.name}</p>
+                  <p className="text-xs text-muted-foreground">{(editPdfFile.size / 1024).toFixed(1)} KB</p>
+                </div>
+                <Button size="sm" onClick={handleEditPdf} className="bg-blue-500 hover:bg-blue-600">Load PDF</Button>
+              </div>
+            )}
           </div>
+
+          {editPdfImages.length > 0 && (
+            <div className="space-y-3">
+              {/* Page Navigation */}
+              <div className="flex items-center justify-between">
+                <Button size="sm" variant="outline" disabled={editCurrentPage === 0} onClick={() => setEditCurrentPage(editCurrentPage - 1)}>
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <span className="text-sm font-medium">Page {editCurrentPage + 1} of {editPdfImages.length}</span>
+                <Button size="sm" variant="outline" disabled={editCurrentPage === editPdfImages.length - 1} onClick={() => setEditCurrentPage(editCurrentPage + 1)}>
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+
+              {/* Color Picker */}
+              <div className="flex items-center gap-2">
+                <Label className="text-xs">Text Color:</Label>
+                {['#ff0000', '#0000ff', '#000000', '#008000', '#ff6600'].map(c => (
+                  <button
+                    key={c}
+                    className={`w-7 h-7 rounded-full border-2 ${editTextColor === c ? 'border-gray-800 scale-110' : 'border-gray-300'} transition-all`}
+                    style={{ backgroundColor: c }}
+                    onClick={() => setEditTextColor(c)}
+                  />
+                ))}
+              </div>
+
+              {/* PDF Canvas with Click-to-Add-Text */}
+              <div className="relative border rounded-lg overflow-hidden" onClick={handleCanvasClick}>
+                <img src={editPdfImages[editCurrentPage]} alt={`Page ${editCurrentPage + 1}`} className="w-full" />
+                {/* Render existing annotations */}
+                {editAnnotations.filter(a => a.page === editCurrentPage).map((ann, i) => (
+                  <div
+                    key={i}
+                    className="absolute group cursor-pointer"
+                    style={{ left: ann.x, top: ann.y, color: ann.color }}
+                  >
+                    <span className="text-sm font-bold drop-shadow-md">{ann.text}</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); deleteAnnotation(editAnnotations.indexOf(ann)) }}
+                      className="absolute -top-2 -right-2 w-4 h-4 bg-red-500 text-white rounded-full text-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                    >×</button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Text Input Popup */}
+              {showTextInput && (
+                <div className="flex gap-2 items-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                  <Input
+                    value={editTextInput}
+                    onChange={e => setEditTextInput(e.target.value)}
+                    placeholder="Type text to add..."
+                    className="flex-1"
+                    autoFocus
+                    onKeyDown={e => e.key === 'Enter' && addTextAnnotation()}
+                  />
+                  <Button size="sm" onClick={addTextAnnotation} className="bg-blue-500 hover:bg-blue-600">Add</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setShowTextInput(false)}>Cancel</Button>
+                </div>
+              )}
+
+              <p className="text-xs text-muted-foreground text-center">Tap on the page to add text. Hover over text to delete.</p>
+
+              {/* Save Button */}
+              <Button onClick={saveEditedPdf} className="w-full bg-blue-500 hover:bg-blue-600" disabled={editPdfImages.length === 0}>
+                <Download className="w-4 h-4 mr-2" /> Save Edited Pages
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
