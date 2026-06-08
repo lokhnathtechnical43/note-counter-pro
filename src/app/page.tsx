@@ -456,6 +456,13 @@ function DashboardPage() {
   const { setPage, expenses, receivables, payables, loans, accounts, user } = useAppStore()
   const [loading, setLoading] = useState(true)
 
+  const getGreeting = () => {
+    const hour = new Date().getHours()
+    if (hour < 12) return 'Good Morning'
+    if (hour < 17) return 'Good Afternoon'
+    return 'Good Evening'
+  }
+
   useEffect(() => {
     async function fetchDashboard() {
       setLoading(true)
@@ -505,7 +512,7 @@ function DashboardPage() {
     <div className="p-4 pb-24 space-y-6">
       {/* Welcome */}
       <div className="bg-gradient-to-r from-emerald-500 to-teal-600 rounded-2xl p-5 text-white">
-        <h2 className="text-xl font-bold">Assalamu Alaikum, {user?.name?.split(' ')[0]}! 👋</h2>
+        <h2 className="text-xl font-bold">{getGreeting()}, {user?.name?.split(' ')[0]}! 👋</h2>
         <p className="text-emerald-100 mt-1">Here&apos;s your financial overview</p>
         <div className="mt-4 flex items-end gap-2">
           <span className="text-3xl font-bold">{formatCurrency(totalBalance)}</span>
