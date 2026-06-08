@@ -2054,9 +2054,9 @@ function ToolsPage() {
     try {
       const arrayBuffer = await pdfFile.arrayBuffer()
       const pdfjsLib = await import('pdfjs-dist')
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
+      pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
       
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+      const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise
       const images: string[] = []
       
       for (let i = 1; i <= pdf.numPages; i++) {
@@ -2101,9 +2101,9 @@ function ToolsPage() {
     try {
       const arrayBuffer = await editPdfFile.arrayBuffer()
       const pdfjsLib = await import('pdfjs-dist')
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
+      pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
       
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+      const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise
       const images: string[] = []
       
       for (let i = 1; i <= pdf.numPages; i++) {
@@ -2159,7 +2159,7 @@ function ToolsPage() {
   const saveEditedPdf = async () => {
     try {
       const pdfjsLib = await import('pdfjs-dist')
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
+      pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
 
       // Render each page with annotations to canvas, then create downloadable images
       for (let p = 0; p < editPdfImages.length; p++) {
