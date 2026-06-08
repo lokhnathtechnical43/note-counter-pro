@@ -1828,9 +1828,9 @@ const NoteCounterPage = memo(function NoteCounterPage() {
   }
 
   return (
-    <div className="flex flex-col bg-gray-50 dark:bg-gray-950 h-screen overflow-hidden">
+    <div className="flex flex-col bg-gray-50 dark:bg-gray-950 overflow-hidden" style={{ height: keyboardHeight > 0 ? `calc(100vh - ${keyboardHeight}px)` : '100vh', transition: 'height 0.15s ease' }}>
       {/* ===== FIXED TOP: HEADER + SUMMARY + PAYABLE/RECEIVABLE ===== */}
-      <div className="bg-white dark:bg-gray-900 shrink-0 z-30">
+      <div className="bg-white dark:bg-gray-900 shrink-0 z-30 border-b border-border/30">
         {/* Header */}
         <div className="px-4 py-3 flex items-center justify-between">
           <h1 className="font-bold text-lg">{language === 'bn' ? 'নোট কাউন্টার' : 'Note Counter'}</h1>
@@ -2093,7 +2093,7 @@ const NoteCounterPage = memo(function NoteCounterPage() {
       </div>{/* end scrollable middle */}
 
       {/* ===== FIXED BOTTOM: GRAND TOTAL + ACTION BUTTONS ===== */}
-      <div className="shrink-0 bg-white dark:bg-gray-900 border-t border-border/50 shadow-[0_-4px_20px_rgba(0,0,0,0.1)]">
+      <div className="shrink-0 bg-white dark:bg-gray-900 border-t border-border/50 shadow-[0_-4px_20px_rgba(0,0,0,0.1)] z-30">
         {/* Grand Total */}
         <div className="px-3 pt-2 pb-1">
           <div className="bg-gradient-to-r from-amber-600 to-yellow-500 rounded-lg p-2.5 flex items-center justify-between">
