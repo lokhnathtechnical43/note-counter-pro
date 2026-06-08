@@ -1731,7 +1731,7 @@ function CalendarPage() {
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   const monthName = currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })
 
-  const days = []
+  const days: (number | null)[] = []
   for (let i = 0; i < firstDay; i++) days.push(null)
   for (let i = 1; i <= daysInMonth; i++) days.push(i)
 
