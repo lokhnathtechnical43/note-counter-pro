@@ -1481,22 +1481,30 @@ function NotesPage() {
 
 // ============ NOTE COUNTER ============
 function NoteCounterPage() {
+  const { language } = useAppStore()
   const [counts, setCounts] = useState<Record<string, number>>({
     '500': 0, '200': 0, '100': 0, '50': 0, '20': 0, '10': 0, '5': 0, '2': 0, '1': 0
   })
   const [savedCounts, setSavedCounts] = useState<Array<{ id: string; date: string; counts: Record<string, number>; total: number }>>([])
   const [showSaved, setShowSaved] = useState(false)
+  const [showCalc, setShowCalc] = useState(false)
+
+  // Calculator state
+  const [calcDisplay, setCalcDisplay] = useState('0')
+  const [calcPrevious, setCalcPrevious] = useState<string | null>(null)
+  const [calcOperation, setCalcOperation] = useState<string | null>(null)
+  const [calcReset, setCalcReset] = useState(false)
 
   const denominations = [
-    { value: 500, label: '₹500', color: 'from-orange-400 to-orange-500' },
-    { value: 200, label: '₹200', color: 'from-yellow-400 to-yellow-500' },
-    { value: 100, label: '₹100', color: 'from-green-400 to-green-500' },
-    { value: 50, label: '₹50', color: 'from-teal-400 to-teal-500' },
-    { value: 20, label: '₹20', color: 'from-blue-400 to-blue-500' },
-    { value: 10, label: '₹10', color: 'from-purple-400 to-purple-500' },
-    { value: 5, label: '₹5', color: 'from-pink-400 to-pink-500' },
-    { value: 2, label: '₹2', color: 'from-indigo-400 to-indigo-500' },
-    { value: 1, label: '₹1', color: 'from-gray-400 to-gray-500' },
+    { value: 500, label: '₹500', labelBn: '৳৫০০', color: 'from-orange-400 to-orange-500' },
+    { value: 200, label: '₹200', labelBn: '৳২০০', color: 'from-yellow-400 to-yellow-500' },
+    { value: 100, label: '₹100', labelBn: '৳১০০', color: 'from-green-400 to-green-500' },
+    { value: 50, label: '₹50', labelBn: '৳৫০', color: 'from-teal-400 to-teal-500' },
+    { value: 20, label: '₹20', labelBn: '৳২০', color: 'from-blue-400 to-blue-500' },
+    { value: 10, label: '₹10', labelBn: '৳১০', color: 'from-purple-400 to-purple-500' },
+    { value: 5, label: '₹5', labelBn: '৳৫', color: 'from-pink-400 to-pink-500' },
+    { value: 2, label: '₹2', labelBn: '৳২', color: 'from-indigo-400 to-indigo-500' },
+    { value: 1, label: '₹1', labelBn: '৳১', color: 'from-gray-400 to-gray-500' },
   ]
 
   const resetCounts = { '500': 0, '200': 0, '100': 0, '50': 0, '20': 0, '10': 0, '5': 0, '2': 0, '1': 0 }
@@ -1514,7 +1522,7 @@ function NoteCounterPage() {
 
   const handleSave = () => {
     if (total === 0) {
-      toast({ title: 'Empty Count', description: 'Count some notes first before saving.', variant: 'destructive' })
+      toast({ title: language === 'bn' ? 'খালি কাউন্ট' : 'Empty Count', description: language === 'bn' ? 'সেভ করার আগে কিছু নোট কাউন্ট করুন।' : 'Count some notes first before saving.', variant: 'destructive' })
       return
     }
     const newEntry = {
@@ -1523,22 +1531,22 @@ function NoteCounterPage() {
       counts: { ...counts },
       total
     }
-    const updated = [newEntry, ...savedCounts].slice(0, 50) // Keep last 50
+    const updated = [newEntry, ...savedCounts].slice(0, 50)
     setSavedCounts(updated)
     localStorage.setItem('noteCounterSaved', JSON.stringify(updated))
-    toast({ title: 'Saved!', description: `Cash count of ${formatCurrency(total)} saved successfully.` })
+    toast({ title: language === 'bn' ? 'সেভ হয়েছে!' : 'Saved!', description: language === 'bn' ? `${formatCurrency(total)} সফলভাবে সেভ হয়েছে` : `Cash count of ${formatCurrency(total)} saved successfully.` })
   }
 
   const handleDelete = (id: string) => {
     const updated = savedCounts.filter(s => s.id !== id)
     setSavedCounts(updated)
     localStorage.setItem('noteCounterSaved', JSON.stringify(updated))
-    toast({ title: 'Deleted', description: 'Saved count removed.' })
+    toast({ title: language === 'bn' ? 'মুছে ফেলা হয়েছে' : 'Deleted', description: language === 'bn' ? 'সেভ করা কাউন্ট মুছে ফেলা হয়েছে' : 'Saved count removed.' })
   }
 
   const handleShare = () => {
     if (total === 0) {
-      toast({ title: 'Empty Count', description: 'Count some notes first before sharing.', variant: 'destructive' })
+      toast({ title: language === 'bn' ? 'খালি কাউন্ট' : 'Empty Count', description: language === 'bn' ? 'শেয়ার করার আগে কিছু নোট কাউন্ট করুন।' : 'Count some notes first before sharing.', variant: 'destructive' })
       return
     }
     let text = `💰 Note Count - ${new Date().toLocaleString('en-IN')}\n`
@@ -1555,7 +1563,7 @@ function NoteCounterPage() {
       navigator.share({ title: 'Note Count', text })
     } else {
       navigator.clipboard.writeText(text)
-      toast({ title: 'Copied!', description: 'Count details copied to clipboard. You can paste and share.' })
+      toast({ title: language === 'bn' ? 'কপি হয়েছে!' : 'Copied!', description: language === 'bn' ? 'কাউন্ট বিবরণ ক্লিপবোর্ডে কপি হয়েছে' : 'Count details copied to clipboard. You can paste and share.' })
     }
   }
 
@@ -1573,25 +1581,136 @@ function NoteCounterPage() {
       navigator.share({ title: 'Note Count', text })
     } else {
       navigator.clipboard.writeText(text)
-      toast({ title: 'Copied!', description: 'Count details copied to clipboard.' })
+      toast({ title: language === 'bn' ? 'কপি হয়েছে!' : 'Copied!', description: language === 'bn' ? 'কাউন্ট বিবরণ ক্লিপবোর্ডে কপি হয়েছে' : 'Count details copied to clipboard.' })
     }
+  }
+
+  // Calculator functions
+  const calcHandleNumber = (num: string) => {
+    if (calcReset) { setCalcDisplay(num); setCalcReset(false) }
+    else setCalcDisplay(calcDisplay === '0' ? num : calcDisplay + num)
+  }
+
+  const calcHandleOperation = (op: string) => {
+    if (calcPrevious && calcOperation && !calcReset) { calcCalculate() }
+    setCalcPrevious(calcDisplay)
+    setCalcOperation(op)
+    setCalcReset(true)
+  }
+
+  const calcCalculate = () => {
+    if (!calcPrevious || !calcOperation) return
+    const prev = parseFloat(calcPrevious)
+    const curr = parseFloat(calcDisplay)
+    let result = 0
+    switch (calcOperation) {
+      case '+': result = prev + curr; break
+      case '-': result = prev - curr; break
+      case '×': result = prev * curr; break
+      case '÷': result = curr !== 0 ? prev / curr : 0; break
+    }
+    setCalcDisplay(String(result))
+    setCalcPrevious(null)
+    setCalcOperation(null)
+    setCalcReset(true)
+  }
+
+  const calcClear = () => { setCalcDisplay('0'); setCalcPrevious(null); setCalcOperation(null) }
+  const calcPercent = () => setCalcDisplay(String(parseFloat(calcDisplay) / 100))
+  const calcToggleSign = () => setCalcDisplay(String(-parseFloat(calcDisplay)))
+  const calcDecimal = () => { if (!calcDisplay.includes('.')) setCalcDisplay(calcDisplay + '.') }
+
+  const sendTotalToCalc = () => {
+    setCalcDisplay(String(total))
+    setCalcPrevious(null)
+    setCalcOperation(null)
+    setCalcReset(true)
+    setShowCalc(true)
+  }
+
+  const calcButtons = [
+    ['C', '+/-', '%', '÷'],
+    ['7', '8', '9', '×'],
+    ['4', '5', '6', '-'],
+    ['1', '2', '3', '+'],
+    ['0', '.', '='],
+  ]
+
+  const calcHandleButton = (val: string) => {
+    if (val >= '0' && val <= '9') calcHandleNumber(val)
+    else if (['+', '-', '×', '÷'].includes(val)) calcHandleOperation(val)
+    else if (val === '=') calcCalculate()
+    else if (val === 'C') calcClear()
+    else if (val === '+/-') calcToggleSign()
+    else if (val === '%') calcPercent()
+    else if (val === '.') calcDecimal()
   }
 
   return (
     <div className="p-4 pb-24 space-y-4">
       <Card className="border-0 shadow-md bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
         <CardContent className="p-5 text-center">
-          <p className="text-amber-100 text-sm">Total Cash</p>
+          <p className="text-amber-100 text-sm">{language === 'bn' ? 'মোট নগদ' : 'Total Cash'}</p>
           <p className="text-4xl font-bold mt-1">{formatCurrency(total)}</p>
-          <p className="text-amber-200 text-sm mt-1">{totalNotes} notes</p>
+          <p className="text-amber-200 text-sm mt-1">{totalNotes} {language === 'bn' ? 'টি নোট' : 'notes'}</p>
+          {/* Send total to calculator */}
+          {total > 0 && (
+            <Button size="sm" variant="secondary" className="mt-3 bg-white/20 hover:bg-white/30 text-white border-0" onClick={sendTotalToCalc}>
+              <Calculator className="w-4 h-4 mr-1" /> {language === 'bn' ? 'ক্যালকুলেটরে পাঠান' : 'Send to Calculator'}
+            </Button>
+          )}
         </CardContent>
       </Card>
+
+      {/* Built-in Calculator */}
+      {showCalc && (
+        <Card className="border-0 shadow-md overflow-hidden">
+          <div className="flex items-center justify-between p-3 bg-gray-900">
+            <div className="flex items-center gap-2">
+              <Calculator className="w-4 h-4 text-emerald-400" />
+              <span className="text-gray-300 text-sm font-medium">{language === 'bn' ? 'ক্যালকুলেটর' : 'Calculator'}</span>
+            </div>
+            <button onClick={() => setShowCalc(false)} className="text-gray-400 hover:text-white p-1">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="bg-gray-900 p-4 pt-0">
+            <div className="text-right mb-4 p-3 bg-gray-800 rounded-xl">
+              {calcOperation && calcPrevious && <p className="text-gray-400 text-sm h-5">{formatCurrency(parseFloat(calcPrevious))} {calcOperation}</p>}
+              <p className="text-white text-3xl font-light">{calcDisplay.includes('.') ? calcDisplay : formatCurrency(parseFloat(calcDisplay))}</p>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {calcButtons.map((row, ri) => (
+                row.map((btn, ci) => {
+                  const isOp = ['+', '-', '×', '÷', '='].includes(btn)
+                  const isFunc = ['C', '+/-', '%'].includes(btn)
+                  return (
+                    <button key={`${ri}-${ci}`} onClick={() => calcHandleButton(btn)}
+                      className={`h-12 rounded-xl text-lg font-medium transition-all active:scale-95
+                        ${btn === '0' ? 'col-span-2' : ''}
+                        ${isOp ? 'bg-emerald-500 text-white hover:bg-emerald-600' : isFunc ? 'bg-gray-600 text-white hover:bg-gray-500' : 'bg-gray-700 text-white hover:bg-gray-600'}`}>
+                      {btn}
+                    </button>
+                  )
+                })
+              ))}
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Calculator toggle when hidden */}
+      {!showCalc && (
+        <Button variant="outline" className="w-full" onClick={() => setShowCalc(true)}>
+          <Calculator className="w-4 h-4 mr-2" /> {language === 'bn' ? 'ক্যালকুলেটর খুলুন' : 'Open Calculator'}
+        </Button>
+      )}
 
       <div className="space-y-2">
         {denominations.map(d => (
           <div key={d.value} className="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 rounded-xl shadow-sm">
             <div className={`w-16 h-10 bg-gradient-to-r ${d.color} rounded-lg flex items-center justify-center text-white text-sm font-bold`}>
-              {d.label}
+              {language === 'bn' ? d.labelBn : d.label}
             </div>
             <div className="flex items-center gap-2 flex-1">
               <button onClick={() => setCounts({ ...counts, [d.value]: Math.max(0, (counts[String(d.value)] || 0) - 1) })} className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center text-red-600 font-bold">-</button>
@@ -1606,13 +1725,13 @@ function NoteCounterPage() {
       {/* Action Buttons */}
       <div className="grid grid-cols-3 gap-2">
         <Button variant="outline" className="w-full" onClick={() => setCounts({ ...resetCounts })}>
-          <RefreshCw className="w-4 h-4 mr-1" /> Reset
+          <RefreshCw className="w-4 h-4 mr-1" /> {language === 'bn' ? 'রিসেট' : 'Reset'}
         </Button>
         <Button className="w-full bg-emerald-600 hover:bg-emerald-700" onClick={handleSave}>
-          <Download className="w-4 h-4 mr-1" /> Save
+          <Download className="w-4 h-4 mr-1" /> {language === 'bn' ? 'সেভ' : 'Save'}
         </Button>
         <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={handleShare}>
-          <Upload className="w-4 h-4 mr-1" /> Share
+          <Upload className="w-4 h-4 mr-1" /> {language === 'bn' ? 'শেয়ার' : 'Share'}
         </Button>
       </div>
 
@@ -1620,14 +1739,14 @@ function NoteCounterPage() {
       <Card className="shadow-md">
         <CardHeader className="pb-2 cursor-pointer" onClick={() => setShowSaved(!showSaved)}>
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base">Saved Counts ({savedCounts.length})</CardTitle>
+            <CardTitle className="text-base">{language === 'bn' ? 'সেভ করা কাউন্ট' : 'Saved Counts'} ({savedCounts.length})</CardTitle>
             {showSaved ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
           </div>
         </CardHeader>
         {showSaved && (
           <CardContent className="space-y-2">
             {savedCounts.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-4">No saved counts yet. Count and save!</p>
+              <p className="text-sm text-gray-500 text-center py-4">{language === 'bn' ? 'এখনও কোনো সেভ করা কাউন্ট নেই। কাউন্ট করে সেভ করুন!' : 'No saved counts yet. Count and save!'}</p>
             ) : (
               savedCounts.map(entry => (
                 <div key={entry.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
@@ -1636,6 +1755,9 @@ function NoteCounterPage() {
                     <p className="text-xs text-gray-500">{entry.date}</p>
                   </div>
                   <div className="flex gap-2">
+                    <button onClick={() => { setCalcDisplay(String(entry.total)); setCalcReset(true); setShowCalc(true) }} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg" title={language === 'bn' ? 'ক্যালকুলেটরে পাঠান' : 'Send to Calculator'}>
+                      <Calculator className="w-4 h-4" />
+                    </button>
                     <button onClick={() => handleShareSaved(entry)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Share">
                       <Upload className="w-4 h-4" />
                     </button>
