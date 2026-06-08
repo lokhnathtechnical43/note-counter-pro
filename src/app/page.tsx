@@ -2354,7 +2354,7 @@ function DocScannerPage() {
     const cc = cropCorners || defaultCorners
 
     return (
-      <div className="flex flex-col h-[100dvh] bg-black">
+      <div className="fixed inset-0 z-50 flex flex-col bg-black">
         {/* Green Header */}
         <div className="flex items-center justify-between px-4 py-3 bg-emerald-700 shrink-0">
           <button onClick={() => { setEditingDoc(null); setCropMode(false); setCropCorners(null); setRotation(0); dragRef.current = null; setDraggingHandle(null) }} className="text-white flex items-center gap-1">
@@ -2631,7 +2631,7 @@ function DocScannerPage() {
   if (collageMode) {
     const collagePreview = generateCollage()
     return (
-      <div className="p-4 pb-24 space-y-4">
+      <div className="fixed inset-0 z-50 bg-gray-50 dark:bg-gray-950 overflow-auto p-4 pb-24 space-y-4">
         <div className="flex items-center gap-3 mb-2">
           <Button variant="ghost" size="sm" onClick={() => { setCollageMode(false); setSelectedForCollage(new Set()) }}>
             <ChevronLeft className="w-5 h-5 mr-1" /> {language === 'bn' ? 'ফিরে যান' : 'Back'}
