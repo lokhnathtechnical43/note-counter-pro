@@ -1396,11 +1396,12 @@ function NotesPage() {
 // ============ NOTE COUNTER ============
 function NoteCounterPage() {
   const [counts, setCounts] = useState<Record<string, number>>({
-    '2000': 0, '500': 0, '200': 0, '100': 0, '50': 0, '20': 0, '10': 0, '5': 0, '2': 0, '1': 0
+    '500': 0, '200': 0, '100': 0, '50': 0, '20': 0, '10': 0, '5': 0, '2': 0, '1': 0
   })
+  const [savedCounts, setSavedCounts] = useState<Array<{ id: string; date: string; counts: Record<string, number>; total: number }>>([])
+  const [showSaved, setShowSaved] = useState(false)
 
   const denominations = [
-    { value: 2000, label: '₹2000', color: 'from-red-400 to-red-500' },
     { value: 500, label: '₹500', color: 'from-orange-400 to-orange-500' },
     { value: 200, label: '₹200', color: 'from-yellow-400 to-yellow-500' },
     { value: 100, label: '₹100', color: 'from-green-400 to-green-500' },
@@ -1412,8 +1413,83 @@ function NoteCounterPage() {
     { value: 1, label: '₹1', color: 'from-gray-400 to-gray-500' },
   ]
 
+  const resetCounts = { '500': 0, '200': 0, '100': 0, '50': 0, '20': 0, '10': 0, '5': 0, '2': 0, '1': 0 }
+
   const total = denominations.reduce((sum, d) => sum + (d.value * (counts[String(d.value)] || 0)), 0)
   const totalNotes = Object.values(counts).reduce((s, c) => s + c, 0)
+
+  // Load saved counts from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('noteCounterSaved')
+      if (saved) setSavedCounts(JSON.parse(saved))
+    } catch {}
+  }, [])
+
+  const handleSave = () => {
+    if (total === 0) {
+      toast({ title: 'Empty Count', description: 'Count some notes first before saving.', variant: 'destructive' })
+      return
+    }
+    const newEntry = {
+      id: Date.now().toString(),
+      date: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+      counts: { ...counts },
+      total
+    }
+    const updated = [newEntry, ...savedCounts].slice(0, 50) // Keep last 50
+    setSavedCounts(updated)
+    localStorage.setItem('noteCounterSaved', JSON.stringify(updated))
+    toast({ title: 'Saved!', description: `Cash count of ${formatCurrency(total)} saved successfully.` })
+  }
+
+  const handleDelete = (id: string) => {
+    const updated = savedCounts.filter(s => s.id !== id)
+    setSavedCounts(updated)
+    localStorage.setItem('noteCounterSaved', JSON.stringify(updated))
+    toast({ title: 'Deleted', description: 'Saved count removed.' })
+  }
+
+  const handleShare = () => {
+    if (total === 0) {
+      toast({ title: 'Empty Count', description: 'Count some notes first before sharing.', variant: 'destructive' })
+      return
+    }
+    let text = `💰 Note Count - ${new Date().toLocaleString('en-IN')}\n`
+    text += `━━━━━━━━━━━━━━━━━━\n`
+    denominations.forEach(d => {
+      const c = counts[String(d.value)] || 0
+      if (c > 0) text += `${d.label} × ${c} = ${formatCurrency(d.value * c)}\n`
+    })
+    text += `━━━━━━━━━━━━━━━━━━\n`
+    text += `📝 Total Notes: ${totalNotes}\n`
+    text += `💵 Total Cash: ${formatCurrency(total)}`
+
+    if (navigator.share) {
+      navigator.share({ title: 'Note Count', text })
+    } else {
+      navigator.clipboard.writeText(text)
+      toast({ title: 'Copied!', description: 'Count details copied to clipboard. You can paste and share.' })
+    }
+  }
+
+  const handleShareSaved = (entry: { id: string; date: string; counts: Record<string, number>; total: number }) => {
+    let text = `💰 Note Count - ${entry.date}\n`
+    text += `━━━━━━━━━━━━━━━━━━\n`
+    denominations.forEach(d => {
+      const c = entry.counts[String(d.value)] || 0
+      if (c > 0) text += `${d.label} × ${c} = ${formatCurrency(d.value * c)}\n`
+    })
+    text += `━━━━━━━━━━━━━━━━━━\n`
+    text += `💵 Total Cash: ${formatCurrency(entry.total)}`
+
+    if (navigator.share) {
+      navigator.share({ title: 'Note Count', text })
+    } else {
+      navigator.clipboard.writeText(text)
+      toast({ title: 'Copied!', description: 'Count details copied to clipboard.' })
+    }
+  }
 
   return (
     <div className="p-4 pb-24 space-y-4">
@@ -1441,9 +1517,52 @@ function NoteCounterPage() {
         ))}
       </div>
 
-      <Button variant="outline" className="w-full" onClick={() => setCounts({ '2000': 0, '500': 0, '200': 0, '100': 0, '50': 0, '20': 0, '10': 0, '5': 0, '2': 0, '1': 0 })}>
-        <RefreshCw className="w-4 h-4 mr-2" /> Reset All
-      </Button>
+      {/* Action Buttons */}
+      <div className="grid grid-cols-3 gap-2">
+        <Button variant="outline" className="w-full" onClick={() => setCounts({ ...resetCounts })}>
+          <RefreshCw className="w-4 h-4 mr-1" /> Reset
+        </Button>
+        <Button className="w-full bg-emerald-600 hover:bg-emerald-700" onClick={handleSave}>
+          <Download className="w-4 h-4 mr-1" /> Save
+        </Button>
+        <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={handleShare}>
+          <Upload className="w-4 h-4 mr-1" /> Share
+        </Button>
+      </div>
+
+      {/* Saved Counts */}
+      <Card className="shadow-md">
+        <CardHeader className="pb-2 cursor-pointer" onClick={() => setShowSaved(!showSaved)}>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Saved Counts ({savedCounts.length})</CardTitle>
+            {showSaved ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+          </div>
+        </CardHeader>
+        {showSaved && (
+          <CardContent className="space-y-2">
+            {savedCounts.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-4">No saved counts yet. Count and save!</p>
+            ) : (
+              savedCounts.map(entry => (
+                <div key={entry.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                  <div>
+                    <p className="text-sm font-semibold">{formatCurrency(entry.total)}</p>
+                    <p className="text-xs text-gray-500">{entry.date}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => handleShareSaved(entry)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Share">
+                      <Upload className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => handleDelete(entry.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Delete">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </CardContent>
+        )}
+      </Card>
     </div>
   )
 }
