@@ -25,7 +25,8 @@ export const metadata: Metadata = {
   title: "DailyLife Pro - Your Complete Life Manager",
   description: "Manage expenses, receivables, payables, loans, accounts, notes, plans, documents and more - all in one app.",
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/favicon.ico",
+    apple: "/logo.png",
   },
 };
 
