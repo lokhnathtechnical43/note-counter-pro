@@ -38,3 +38,30 @@ Stage Summary:
 - Admin panel for user management
 - Lint passes, no compilation errors
 - Browser verified: registration, expenses, notes, calculator, note counter all working
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix Doc Scanner crop interaction and add magnifier/zoom lens
+
+Work Log:
+- Identified root cause: handlePointerMove callback depended on cropCorners state, causing useEffect with global listeners to re-run on every drag move, missing events
+- Added refs (draggingHandleRef, cropCornersRef, editingDocRef, scannedDocsRef) to hold mutable state for stable event listeners
+- Rewrote handlePointerMove to use refs instead of state dependencies - now has empty dependency array []
+- Added setPointerCapture on pointer down for reliable touch/mouse tracking
+- Changed global listeners from conditional (only when draggingHandle set) to always-on with internal ref check
+- Added { passive: false } to pointermove listener to prevent default scroll behavior
+- Fixed magnifier: pre-loaded image via magnifierImgRef instead of creating new Image() on every render
+- Fixed applyCrop: now uses pre-loaded image or waits for Image.onload
+- Fixed rotateImage: same async image loading fix
+- Changed crop handles from <button> to <div> elements to avoid default browser button behavior
+- Increased handle touch targets (48px for corners, 40px for edges)
+- Added touch-none class to image container during crop mode
+- Added cursor-grab / cursor-grabbing styles
+- Improved magnifier styling with rounded-2xl border and better positioning
+
+Stage Summary:
+- Crop interaction fully fixed - stable event listeners that don't re-create during drag
+- Magnifier/zoom lens now works with pre-loaded image (3.5x zoom with crosshair)
+- Apply crop and rotate now properly wait for image to load before canvas operations
+- Build successful, server deployed on port 3000 (proxied via Caddy on port 81)

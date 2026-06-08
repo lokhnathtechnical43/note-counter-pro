@@ -1933,6 +1933,22 @@ function DocScannerPage() {
   const [magnifier, setMagnifier] = useState<{ x: number; y: number; show: boolean }>({ x: 0, y: 0, show: false })
   const magnifierCanvasRef = React.useRef<HTMLCanvasElement>(null)
 
+  // Refs for stable event listeners (avoid re-creating listeners on every state change)
+  const draggingHandleRef = useRef<string | null>(null)
+  const cropCornersRef = useRef<typeof cropCorners>(null)
+  const editingDocRef = useRef<string | null>(null)
+  const scannedDocsRef = useRef<ScanDoc[]>([])
+
+  // Keep refs in sync with state
+  useEffect(() => { draggingHandleRef.current = draggingHandle }, [draggingHandle])
+  useEffect(() => { cropCornersRef.current = cropCorners }, [cropCorners])
+  useEffect(() => { editingDocRef.current = editingDoc }, [editingDoc])
+  useEffect(() => { scannedDocsRef.current = scannedDocs }, [scannedDocs])
+
+  // Pre-loaded image for magnifier
+  const magnifierImgRef = useRef<HTMLImageElement | null>(null)
+  const [magnifierImgReady, setMagnifierImgReady] = useState(false)
+
   // Load vault documents on mount
   const loadVaultDocs = useCallback(async () => {
     try {
@@ -2094,22 +2110,38 @@ function DocScannerPage() {
     toast({ title: language === 'bn' ? `${unsaved.length}টি ডকুমেন্ট ডকভল্টে সেভ হয়েছে!` : `${unsaved.length} documents saved to DocVault!` })
   }
 
-  const handleCropMouseDown = (e: React.MouseEvent | React.TouchEvent, handle: string) => {
+  // Pre-load image for magnifier when editing doc changes
+  useEffect(() => {
+    if (!editingDoc) return
+    const doc = scannedDocsRef.current.find(d => d.id === editingDoc)
+    if (!doc) return
+    const filtered = getFilteredData(doc)
+    const img = new Image()
+    img.onload = () => {
+      magnifierImgRef.current = img
+      setMagnifierImgReady(true)
+    }
+    img.src = filtered
+    return () => { magnifierImgRef.current = null; setMagnifierImgReady(false) }
+  }, [editingDoc])
+
+  const handleCropMouseDown = (e: React.PointerEvent, handle: string) => {
     e.preventDefault()
     e.stopPropagation()
+    // Capture the pointer on the target element for reliable tracking
+    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
     setDraggingHandle(handle)
+    draggingHandleRef.current = handle
     setMagnifier(prev => ({ ...prev, show: true }))
   }
 
-  // Get the actual rendered image rect within the container
-  const getImageRect = useCallback(() => {
-    if (!imageRef.current) return null
-    return imageRef.current.getBoundingClientRect()
-  }, [])
-
+  // Stable pointer move handler using refs (no dependency on state that changes during drag)
   const handlePointerMove = useCallback((clientX: number, clientY: number) => {
-    if (!draggingHandle || !cropCorners) return
-    const imgRect = getImageRect()
+    const handle = draggingHandleRef.current
+    const corners = cropCornersRef.current
+    if (!handle || !corners) return
+    if (!imageRef.current) return
+    const imgRect = imageRef.current.getBoundingClientRect()
     if (!imgRect) return
 
     // Convert client coords to percentage (0-1) within the ACTUAL image bounds
@@ -2119,37 +2151,32 @@ function DocScannerPage() {
     // Update magnifier position
     setMagnifier({ x: px, y: py, show: true })
 
-    // Draw magnifier
-    const doc = scannedDocs.find(d => d.id === editingDoc)
-    if (doc && magnifierCanvasRef.current) {
+    // Draw magnifier using pre-loaded image
+    if (magnifierImgRef.current && magnifierCanvasRef.current) {
       const mCanvas = magnifierCanvasRef.current
       const mCtx = mCanvas.getContext('2d')
       if (mCtx) {
-        const img = new Image()
-        img.src = getFilteredData(doc)
+        const img = magnifierImgRef.current
         const nw = img.naturalWidth || 800
         const nh = img.naturalHeight || 600
         const zoomFactor = 3
         const lensSize = 120
         mCanvas.width = lensSize
         mCanvas.height = lensSize
-        // Source area in natural pixels
-        const srcX = Math.max(0, px * nw - lensSize / zoomFactor / 2)
-        const srcY = Math.max(0, py * nh - lensSize / zoomFactor / 2)
+        const srcX = Math.max(0, Math.min(nw - lensSize / zoomFactor, px * nw - lensSize / zoomFactor / 2))
+        const srcY = Math.max(0, Math.min(nh - lensSize / zoomFactor, py * nh - lensSize / zoomFactor / 2))
         const srcW = lensSize / zoomFactor
         const srcH = lensSize / zoomFactor
         mCtx.clearRect(0, 0, lensSize, lensSize)
         mCtx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, lensSize, lensSize)
-        // Draw crosshair
+        // Crosshair
         mCtx.strokeStyle = '#22c55e'
         mCtx.lineWidth = 1
         mCtx.beginPath()
-        mCtx.moveTo(lensSize / 2, 0)
-        mCtx.lineTo(lensSize / 2, lensSize)
-        mCtx.moveTo(0, lensSize / 2)
-        mCtx.lineTo(lensSize, lensSize / 2)
+        mCtx.moveTo(lensSize / 2, 0); mCtx.lineTo(lensSize / 2, lensSize)
+        mCtx.moveTo(0, lensSize / 2); mCtx.lineTo(lensSize, lensSize / 2)
         mCtx.stroke()
-        // Draw border
+        // Border
         mCtx.strokeStyle = '#22c55e'
         mCtx.lineWidth = 3
         mCtx.strokeRect(1.5, 1.5, lensSize - 3, lensSize - 3)
@@ -2159,7 +2186,7 @@ function DocScannerPage() {
     setCropCorners(prev => {
       if (!prev) return prev
       const updated = { ...prev, tl: { ...prev.tl }, tr: { ...prev.tr }, br: { ...prev.br }, bl: { ...prev.bl } }
-      switch (draggingHandle) {
+      switch (handle) {
         case 'tl': updated.tl = { x: px, y: py }; break
         case 'tr': updated.tr = { x: px, y: py }; break
         case 'br': updated.br = { x: px, y: py }; break
@@ -2171,49 +2198,65 @@ function DocScannerPage() {
       }
       return updated
     })
-  }, [draggingHandle, cropCorners, getImageRect, scannedDocs, editingDoc])
+  }, []) // No dependencies! Uses refs for mutable state
 
   const handlePointerUp = useCallback(() => {
+    draggingHandleRef.current = null
     setDraggingHandle(null)
     setMagnifier(prev => ({ ...prev, show: false }))
   }, [])
 
-  // Global pointer move/up listeners
+  // Global pointer move/up listeners - STABLE, never re-created
   useEffect(() => {
-    if (!draggingHandle) return
-    const onMove = (e: PointerEvent) => handlePointerMove(e.clientX, e.clientY)
+    const onMove = (e: PointerEvent) => {
+      e.preventDefault()
+      handlePointerMove(e.clientX, e.clientY)
+    }
     const onUp = () => handlePointerUp()
-    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointermove', onMove, { passive: false })
     window.addEventListener('pointerup', onUp)
     return () => {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
     }
-  }, [draggingHandle, handlePointerMove, handlePointerUp])
+  }, [handlePointerMove, handlePointerUp])
 
   const applyCrop = () => {
     const doc = scannedDocs.find(d => d.id === editingDoc)
     if (!doc || !cropCorners) return
-    const canvas = document.createElement('canvas')
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    const img = new Image()
-    img.src = doc.data
-    const nw = img.naturalWidth || 800
-    const nh = img.naturalHeight || 600
-    const x = Math.round(cropCorners.tl.x * nw)
-    const y = Math.round(cropCorners.tl.y * nh)
-    const w = Math.round((cropCorners.br.x - cropCorners.tl.x) * nw)
-    const h = Math.round((cropCorners.br.y - cropCorners.tl.y) * nh)
-    if (w < 20 || h < 20) { toast({ title: language === 'bn' ? 'ক্রপ এরিয়া ছোট হয়েছে' : 'Crop area too small', variant: 'destructive' }); return }
-    canvas.width = w
-    canvas.height = h
-    ctx.drawImage(img, x, y, w, h, 0, 0, w, h)
-    const croppedData = canvas.toDataURL('image/jpeg', 0.85)
-    setScannedDocs(prev => prev.map(d => d.id === editingDoc ? { ...d, data: croppedData, filter: 'original' as ScanFilter, savedToVault: false } : d))
-    setCropMode(false)
-    setCropCorners(null)
-    toast({ title: language === 'bn' ? 'ক্রপ হয়েছে!' : 'Cropped!' })
+    // Use pre-loaded image if available, otherwise load fresh
+    const doCrop = (img: HTMLImageElement) => {
+      const nw = img.naturalWidth || 800
+      const nh = img.naturalHeight || 600
+      // Support non-rectangular crop: find bounding box of the 4 corners
+      const minX = Math.min(cropCorners.tl.x, cropCorners.bl.x)
+      const minY = Math.min(cropCorners.tl.y, cropCorners.tr.y)
+      const maxX = Math.max(cropCorners.tr.x, cropCorners.br.x)
+      const maxY = Math.max(cropCorners.bl.y, cropCorners.br.y)
+      const x = Math.round(minX * nw)
+      const y = Math.round(minY * nh)
+      const w = Math.round((maxX - minX) * nw)
+      const h = Math.round((maxY - minY) * nh)
+      if (w < 20 || h < 20) { toast({ title: language === 'bn' ? 'ক্রপ এরিয়া ছোট হয়েছে' : 'Crop area too small', variant: 'destructive' }); return }
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+      canvas.width = w
+      canvas.height = h
+      ctx.drawImage(img, x, y, w, h, 0, 0, w, h)
+      const croppedData = canvas.toDataURL('image/jpeg', 0.85)
+      setScannedDocs(prev => prev.map(d => d.id === editingDoc ? { ...d, data: croppedData, filter: 'original' as ScanFilter, savedToVault: false } : d))
+      setCropMode(false)
+      setCropCorners(null)
+      toast({ title: language === 'bn' ? 'ক্রপ হয়েছে!' : 'Cropped!' })
+    }
+    if (magnifierImgRef.current && magnifierImgRef.current.complete && magnifierImgRef.current.naturalWidth > 0) {
+      doCrop(magnifierImgRef.current)
+    } else {
+      const img = new Image()
+      img.onload = () => doCrop(img)
+      img.src = getFilteredData(doc)
+    }
   }
 
   const resetCrop = () => {
@@ -2223,26 +2266,32 @@ function DocScannerPage() {
   const rotateImage = (degrees: number) => {
     const doc = scannedDocs.find(d => d.id === editingDoc)
     if (!doc) return
-    const canvas = document.createElement('canvas')
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    const img = new Image()
-    img.src = doc.data
-    const nw = img.naturalWidth || 800
-    const nh = img.naturalHeight || 600
-    if (degrees === 90 || degrees === 270) {
-      canvas.width = nh; canvas.height = nw
-    } else {
-      canvas.width = nw; canvas.height = nh
+    const doRotate = (img: HTMLImageElement) => {
+      const nw = img.naturalWidth || 800
+      const nh = img.naturalHeight || 600
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+      if (degrees === 90 || degrees === 270) {
+        canvas.width = nh; canvas.height = nw
+      } else {
+        canvas.width = nw; canvas.height = nh
+      }
+      ctx.translate(canvas.width / 2, canvas.height / 2)
+      ctx.rotate((degrees * Math.PI) / 180)
+      ctx.drawImage(img, -nw / 2, -nh / 2)
+      const rotatedData = canvas.toDataURL('image/jpeg', 0.85)
+      setScannedDocs(prev => prev.map(d => d.id === editingDoc ? { ...d, data: rotatedData, filter: 'original' as ScanFilter, savedToVault: false } : d))
+      setRotation(prev => (prev + degrees) % 360)
+      setCropCorners({ tl: { x: 0.05, y: 0.05 }, tr: { x: 0.95, y: 0.05 }, br: { x: 0.95, y: 0.95 }, bl: { x: 0.05, y: 0.95 } })
     }
-    ctx.translate(canvas.width / 2, canvas.height / 2)
-    ctx.rotate((degrees * Math.PI) / 180)
-    ctx.drawImage(img, -nw / 2, -nh / 2)
-    const rotatedData = canvas.toDataURL('image/jpeg', 0.85)
-    setScannedDocs(prev => prev.map(d => d.id === editingDoc ? { ...d, data: rotatedData, filter: 'original' as ScanFilter, savedToVault: false } : d))
-    setRotation(prev => (prev + degrees) % 360)
-    // Reset crop corners after rotation
-    setCropCorners({ tl: { x: 0.05, y: 0.05 }, tr: { x: 0.95, y: 0.05 }, br: { x: 0.95, y: 0.95 }, bl: { x: 0.05, y: 0.95 } })
+    if (magnifierImgRef.current && magnifierImgRef.current.complete && magnifierImgRef.current.naturalWidth > 0) {
+      doRotate(magnifierImgRef.current)
+    } else {
+      const img = new Image()
+      img.onload = () => doRotate(img)
+      img.src = doc.data
+    }
   }
 
   // Generate collage
@@ -2359,14 +2408,14 @@ function DocScannerPage() {
         <canvas ref={magnifierCanvasRef} className="hidden" />
 
         {/* Main Image Area */}
-        <div className="flex-1 relative flex items-center justify-center overflow-hidden bg-black p-2">
+        <div className={`flex-1 relative flex items-center justify-center overflow-hidden bg-black p-2 ${cropMode ? 'touch-none' : ''}`}>
           {/* Image with relative positioning for overlay */}
           <div className="relative inline-block max-w-full max-h-full" style={{ lineHeight: 0 }}>
             <img
               ref={imageRef}
               src={filteredSrc}
               alt="Scan"
-              className="max-w-full max-h-[70dvh] select-none"
+              className={`max-w-full max-h-[70dvh] select-none ${cropMode ? 'touch-none pointer-events-none' : ''}`}
               style={{ objectFit: 'contain' }}
               draggable={false}
               onLoad={(e) => {
@@ -2422,20 +2471,20 @@ function DocScannerPage() {
                 {(['tl', 'tr', 'br', 'bl'] as const).map(corner => {
                   const pos = cc[corner]
                   return (
-                    <button
+                    <div
                       key={corner}
                       onPointerDown={(e) => handleCropMouseDown(e, corner)}
-                      className="absolute z-20 touch-none"
+                      className="absolute z-20 touch-none cursor-grab active:cursor-grabbing"
                       style={{
                         left: `${pos.x * 100}%`,
                         top: `${pos.y * 100}%`,
                         transform: 'translate(-50%, -50%)',
-                        width: 40, height: 40,
+                        width: 48, height: 48,
                         display: 'flex', alignItems: 'center', justifyContent: 'center'
                       }}
                     >
-                      <div className="w-6 h-6 rounded-full bg-emerald-500 border-[2.5px] border-white shadow-lg shadow-black/50" />
-                    </button>
+                      <div className="w-7 h-7 rounded-full bg-emerald-500 border-[3px] border-white shadow-lg shadow-black/60" />
+                    </div>
                   )
                 })}
 
@@ -2446,67 +2495,65 @@ function DocScannerPage() {
                   { id: 'left', pos: { x: (cc.tl.x + cc.bl.x) / 2, y: (cc.tl.y + cc.bl.y) / 2 } },
                   { id: 'right', pos: { x: (cc.tr.x + cc.br.x) / 2, y: (cc.tr.y + cc.br.y) / 2 } },
                 ].map(({ id, pos }) => (
-                  <button
+                  <div
                     key={id}
                     onPointerDown={(e) => handleCropMouseDown(e, id)}
-                    className="absolute z-20 touch-none"
+                    className="absolute z-20 touch-none cursor-grab active:cursor-grabbing"
                     style={{
                       left: `${pos.x * 100}%`,
                       top: `${pos.y * 100}%`,
                       transform: 'translate(-50%, -50%)',
-                      width: 36, height: 36,
+                      width: 40, height: 40,
                       display: 'flex', alignItems: 'center', justifyContent: 'center'
                     }}
                   >
-                    <div className="w-4 h-4 bg-emerald-500 border-2 border-white shadow-lg shadow-black/50 rounded-[2px]" />
-                  </button>
+                    <div className="w-5 h-5 bg-emerald-500 border-2 border-white shadow-lg shadow-black/60 rounded-[3px]" />
+                  </div>
                 ))}
 
                 {/* Magnifier / Zoom Lens */}
-                {magnifier.show && draggingHandle && (
+                {magnifier.show && draggingHandle && magnifierImgRef.current && (
                   <div
                     className="absolute z-30 pointer-events-none"
                     style={{
-                      left: `${Math.min(magnifier.x * 100 + 8, 70)}%`,
-                      top: `${Math.max(magnifier.y * 100 - 35, 5)}%`,
+                      left: `${Math.min(magnifier.x * 100 + 8, 65)}%`,
+                      top: `${Math.max(magnifier.y * 100 - 40, 2)}%`,
                     }}
                   >
                     <div className="relative">
-                      <canvas
-                        width={120}
-                        height={120}
-                        className="rounded-xl border-2 border-emerald-400 shadow-xl shadow-black/50"
-                        style={{ width: 100, height: 100 }}
-                        ref={(el) => {
-                          if (el && editingDocData) {
-                            const mCtx = el.getContext('2d')
-                            if (mCtx) {
-                              const img = new Image()
-                              img.src = filteredSrc
-                              const nw = imageNaturalSize.w || 800
-                              const nh = imageNaturalSize.h || 600
-                              const zoomFactor = 3.5
-                              const displaySize = 120
-                              const srcX = Math.max(0, magnifier.x * nw - displaySize / zoomFactor / 2)
-                              const srcY = Math.max(0, magnifier.y * nh - displaySize / zoomFactor / 2)
-                              const srcW = displaySize / zoomFactor
-                              const srcH = displaySize / zoomFactor
-                              mCtx.clearRect(0, 0, displaySize, displaySize)
-                              mCtx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, displaySize, displaySize)
-                              // Crosshair
-                              mCtx.strokeStyle = '#22c55e'
-                              mCtx.lineWidth = 1
-                              mCtx.beginPath()
-                              mCtx.moveTo(displaySize / 2, 0)
-                              mCtx.lineTo(displaySize / 2, displaySize)
-                              mCtx.moveTo(0, displaySize / 2)
-                              mCtx.lineTo(displaySize, displaySize / 2)
-                              mCtx.stroke()
+                      <div className="w-[110px] h-[110px] rounded-2xl border-[3px] border-emerald-400 shadow-2xl shadow-black/70 overflow-hidden bg-black/90">
+                        <canvas
+                          width={120}
+                          height={120}
+                          style={{ width: 110, height: 110 }}
+                          ref={(el) => {
+                            if (el && magnifierImgRef.current) {
+                              const mCtx = el.getContext('2d')
+                              if (mCtx) {
+                                const img = magnifierImgRef.current
+                                const nw = img.naturalWidth || 800
+                                const nh = img.naturalHeight || 600
+                                const zoomFactor = 3.5
+                                const displaySize = 120
+                                const srcX = Math.max(0, Math.min(nw - displaySize / zoomFactor, magnifier.x * nw - displaySize / zoomFactor / 2))
+                                const srcY = Math.max(0, Math.min(nh - displaySize / zoomFactor, magnifier.y * nh - displaySize / zoomFactor / 2))
+                                const srcW = displaySize / zoomFactor
+                                const srcH = displaySize / zoomFactor
+                                mCtx.clearRect(0, 0, displaySize, displaySize)
+                                mCtx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, displaySize, displaySize)
+                                // Crosshair
+                                mCtx.strokeStyle = 'rgba(34,197,94,0.8)'
+                                mCtx.lineWidth = 1
+                                mCtx.beginPath()
+                                mCtx.moveTo(displaySize / 2, 0); mCtx.lineTo(displaySize / 2, displaySize)
+                                mCtx.moveTo(0, displaySize / 2); mCtx.lineTo(displaySize, displaySize / 2)
+                                mCtx.stroke()
+                              }
                             }
-                          }
-                        }}
-                      />
-                      <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[9px] text-emerald-400 bg-black/70 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                          }}
+                        />
+                      </div>
+                      <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] font-bold text-emerald-300 bg-black/80 px-2 py-0.5 rounded-full whitespace-nowrap">
                         3.5x {language === 'bn' ? 'জুম' : 'zoom'}
                       </div>
                     </div>
