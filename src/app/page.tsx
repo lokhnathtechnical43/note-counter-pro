@@ -4952,8 +4952,8 @@ const AdminPage = memo(function AdminPage() {
 })
 
 // ============ ADMOB HELPER ============
-const ADMOB_BANNER_ID = 'ca-app-pub-XXXXXXXXXXXXXXXX/BBBBBBBBBB' // TODO: Replace with your Banner Ad Unit ID
-const ADMOB_INTERSTITIAL_ID = 'ca-app-pub-XXXXXXXXXXXXXXXX/IIIIIIIIII' // TODO: Replace with your Interstitial Ad Unit ID
+const ADMOB_BANNER_ID = 'ca-app-pub-1742730064755213/6662912587'
+const ADMOB_INTERSTITIAL_ID = 'ca-app-pub-1742730064755213/6471340896'
 
 // Check if running in Capacitor native app
 function isNativeApp(): boolean {
