@@ -30,6 +30,12 @@ const config: CapacitorConfig = {
       style: 'DARK',
       backgroundColor: '#1a1a2e',
     },
+    AdMob: {
+      appId: 'ca-app-pub-XXXXXXXXXXXXXXXX~YYYYYYYYYY', // TODO: Replace with your AdMob App ID
+      bannerAdId: 'ca-app-pub-XXXXXXXXXXXXXXXX/BBBBBBBBBB', // TODO: Replace with your Banner Ad Unit ID
+      interstitialAdId: 'ca-app-pub-XXXXXXXXXXXXXXXX/IIIIIIIIII', // TODO: Replace with your Interstitial Ad Unit ID
+      isTesting: true, // Set to false when publishing to Play Store
+    },
   },
 };
 

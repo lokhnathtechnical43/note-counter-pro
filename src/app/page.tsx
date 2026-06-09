@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback, useRef, useMemo, memo } from '
 import { useAppStore, Page } from '@/lib/store'
 import { useShallow } from 'zustand/react/shallow'
 import apiFetch from '@/lib/api'
+import { AdMob, BannerAdSize, BannerAdPosition, InterstitialAdPluginEvents } from '@capacitor-community/admob'
 import { translations, TranslationKey, Lang } from '@/lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -4950,6 +4951,85 @@ const AdminPage = memo(function AdminPage() {
   )
 })
 
+// ============ ADMOB HELPER ============
+const ADMOB_BANNER_ID = 'ca-app-pub-XXXXXXXXXXXXXXXX/BBBBBBBBBB' // TODO: Replace with your Banner Ad Unit ID
+const ADMOB_INTERSTITIAL_ID = 'ca-app-pub-XXXXXXXXXXXXXXXX/IIIIIIIIII' // TODO: Replace with your Interstitial Ad Unit ID
+
+// Check if running in Capacitor native app
+function isNativeApp(): boolean {
+  if (typeof window === 'undefined') return false
+  return !!(window as any).Capacitor?.isNativePlatform?.()
+}
+
+// AdMob Banner Component
+const AdMobBanner = memo(function AdMobBanner() {
+  const [bannerReady, setBannerReady] = useState(false)
+
+  useEffect(() => {
+    if (!isNativeApp()) return
+
+    let mounted = true
+
+    const initBanner = async () => {
+      try {
+        await AdMob.initialize({
+          testingDevices: [''],
+          initializeForTesting: true, // TODO: Set to false for production
+        })
+        await AdMob.showBanner({
+          adId: ADMOB_BANNER_ID,
+          adSize: BannerAdSize.ADAPTIVE_BANNER,
+          position: BannerAdPosition.BOTTOM_CENTER,
+          isTesting: true, // TODO: Set to false for production
+          margin: 60, // Above bottom nav
+        })
+        if (mounted) setBannerReady(true)
+      } catch (e) {
+        console.log('AdMob banner error:', e)
+      }
+    }
+
+    initBanner()
+
+    return () => {
+      mounted = false
+      if (isNativeApp()) {
+        AdMob.removeBanner().catch(() => {})
+      }
+    }
+  }, [])
+
+  if (!isNativeApp() || !bannerReady) return null
+  return null // Banner is rendered natively by AdMob
+})
+
+// Show interstitial ad (call on page transitions)
+let interstitialLoaded = false
+let lastInterstitialTime = 0
+
+async function showInterstitialAd() {
+  if (!isNativeApp()) return
+  
+  // Don't show more than once every 3 minutes
+  const now = Date.now()
+  if (now - lastInterstitialTime < 180000) return
+
+  try {
+    if (!interstitialLoaded) {
+      await AdMob.prepareInterstitial({
+        adId: ADMOB_INTERSTITIAL_ID,
+        isTesting: true, // TODO: Set to false for production
+      })
+      interstitialLoaded = true
+    }
+    await AdMob.showInterstitial()
+    lastInterstitialTime = now
+    interstitialLoaded = false
+  } catch (e) {
+    console.log('AdMob interstitial error:', e)
+  }
+}
+
 // ============ MAIN APP ============
 export default function DailyLifeApp() {
   const { isAuthenticated, currentPage, token, setAuth, logout, language, setLanguage } = useAppStore(useShallow(state => ({
@@ -5003,6 +5083,10 @@ export default function DailyLifeApp() {
   useEffect(() => {
     if (currentPage !== 'dashboard' && isAuthenticated) {
       window.history.pushState({ page: currentPage }, '', '')
+    }
+    // Show interstitial ad on page change (not on first load)
+    if (isAuthenticated && currentPage !== 'dashboard') {
+      showInterstitialAd()
     }
   }, [currentPage, isAuthenticated])
 
@@ -5069,6 +5153,7 @@ export default function DailyLifeApp() {
         {renderPage()}
       </main>
       <BottomNav />
+      <AdMobBanner />
     </div>
   )
 }
