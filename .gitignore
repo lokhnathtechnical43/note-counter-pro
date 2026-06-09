@@ -9,3 +9,5 @@ download/
 mini-services/
 examples/
 *.db
+android/app/build/
+out/
