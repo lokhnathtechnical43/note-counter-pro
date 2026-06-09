@@ -3983,34 +3983,34 @@ const CalculatorPage = memo(function CalculatorPage() {
 
   return (
     <div className="p-4 pb-24 space-y-4">
-      <div className="bg-gray-900 rounded-2xl shadow-xl overflow-hidden">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl overflow-hidden border border-border">
         {/* Header with history toggle */}
         <div className="flex items-center justify-between px-5 pt-4">
-          <span className="text-gray-400 text-xs font-medium">{language === 'bn' ? 'ক্যালকুলেটর' : 'Calculator'}</span>
-          <button onClick={() => setShowHistory(!showHistory)} className={`text-gray-400 hover:text-white p-1 transition-colors ${showHistory ? 'text-emerald-400' : ''}`}>
+          <span className="text-gray-500 dark:text-gray-400 text-xs font-medium">{language === 'bn' ? 'ক্যালকুলেটর' : 'Calculator'}</span>
+          <button onClick={() => setShowHistory(!showHistory)} className={`text-gray-400 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 transition-colors ${showHistory ? 'text-emerald-600 dark:text-emerald-400' : ''}`}>
             <History className="w-4 h-4" />
           </button>
         </div>
 
         {/* History panel */}
         {showHistory && (
-          <div className="mx-4 mb-2 bg-gray-800 rounded-xl max-h-48 overflow-y-auto">
-            <div className="flex items-center justify-between p-2 px-3 sticky top-0 bg-gray-800 z-10">
-              <span className="text-gray-400 text-xs font-medium">{language === 'bn' ? 'ইতিহাস' : 'History'} ({calcHistory.length})</span>
+          <div className="mx-4 mb-2 bg-gray-100 dark:bg-gray-800 rounded-xl max-h-48 overflow-y-auto border border-border">
+            <div className="flex items-center justify-between p-2 px-3 sticky top-0 bg-gray-100 dark:bg-gray-800 z-10">
+              <span className="text-gray-500 dark:text-gray-400 text-xs font-medium">{language === 'bn' ? 'ইতিহাস' : 'History'} ({calcHistory.length})</span>
               {calcHistory.length > 0 && (
-                <button onClick={clearHistory} className="text-red-400 hover:text-red-300 text-xs">{language === 'bn' ? 'মুছুন' : 'Clear'}</button>
+                <button onClick={clearHistory} className="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 text-xs">{language === 'bn' ? 'মুছুন' : 'Clear'}</button>
               )}
             </div>
             {calcHistory.length === 0 ? (
-              <p className="text-gray-500 text-xs text-center py-4">{language === 'bn' ? 'এখনও কোনো ক্যালকুলেশন নেই' : 'No calculations yet'}</p>
+              <p className="text-gray-400 dark:text-gray-500 text-xs text-center py-4">{language === 'bn' ? 'এখনও কোনো ক্যালকুলেশন নেই' : 'No calculations yet'}</p>
             ) : (
               <div className="space-y-1 px-2 pb-2">
                 {calcHistory.map(entry => (
                   <button key={entry.id} onClick={() => applyHistoryResult(entry.result)}
-                    className="w-full text-right p-2 rounded-lg hover:bg-gray-700 transition-colors group">
-                    <p className="text-gray-500 text-[10px]">{entry.date}</p>
-                    <p className="text-gray-400 text-xs">{entry.expression}</p>
-                    <p className="text-emerald-400 text-sm font-medium group-hover:text-emerald-300">= {formatCurrency(parseFloat(entry.result))}</p>
+                    className="w-full text-right p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors group">
+                    <p className="text-gray-400 dark:text-gray-500 text-[10px]">{entry.date}</p>
+                    <p className="text-gray-500 dark:text-gray-400 text-xs">{entry.expression}</p>
+                    <p className="text-emerald-600 dark:text-emerald-400 text-sm font-medium group-hover:text-emerald-700 dark:group-hover:text-emerald-300">= {formatCurrency(parseFloat(entry.result))}</p>
                   </button>
                 ))}
               </div>
@@ -4021,9 +4021,9 @@ const CalculatorPage = memo(function CalculatorPage() {
         {/* Display */}
         <div className="px-6 pb-2">
           <div className="text-right mb-4">
-            {expression && <p className="text-gray-400 text-sm h-5 truncate">{expression}</p>}
-            {!expression && operation && previousValue && <p className="text-gray-400 text-sm h-5 truncate">{formatCurrency(parseFloat(previousValue))} {operation}</p>}
-            <p className="text-white text-4xl font-light truncate">{display.includes('.') ? display : formatCurrency(parseFloat(display))}</p>
+            {expression && <p className="text-gray-500 dark:text-gray-400 text-sm h-5 truncate">{expression}</p>}
+            {!expression && operation && previousValue && <p className="text-gray-500 dark:text-gray-400 text-sm h-5 truncate">{formatCurrency(parseFloat(previousValue))} {operation}</p>}
+            <p className="text-gray-900 dark:text-white text-4xl font-light truncate">{display.includes('.') ? display : formatCurrency(parseFloat(display))}</p>
           </div>
         </div>
 
@@ -4039,7 +4039,7 @@ const CalculatorPage = memo(function CalculatorPage() {
                   <button key={`${ri}-${ci}`} onClick={() => handleButton(btn)}
                     className={`h-14 rounded-2xl text-xl font-medium transition-all active:scale-95
                       ${btn === '0' ? 'col-span-2' : ''}
-                      ${isOp ? (isActiveOp ? 'bg-emerald-300 text-gray-900' : 'bg-emerald-500 text-white hover:bg-emerald-600') : isFunc ? 'bg-gray-600 text-white hover:bg-gray-500' : 'bg-gray-700 text-white hover:bg-gray-600'}`}>
+                      ${isOp ? (isActiveOp ? 'bg-emerald-300 text-gray-900' : 'bg-emerald-500 text-white hover:bg-emerald-600') : isFunc ? 'bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-white hover:bg-gray-300 dark:hover:bg-gray-500' : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-600'}`}>
                     {btn}
                   </button>
                 )
