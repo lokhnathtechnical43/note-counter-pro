@@ -1,0 +1,20 @@
+===========================================
+   DAILYLIFE PRO - ANDROID SIGNING INFO
+   ⚠️ KEEP THIS FILE SAFE - DO NOT LOSE!
+===========================================
+
+Keystore File: dailylife-pro.keystore
+Keystore Password: Dailylife@2026
+Key Alias: dailylife
+Key Password: Dailylife@2026
+Validity: 10000 days (~27 years)
+Algorithm: RSA 2048-bit
+
+Package Name: com.lokhnathtechnical.dailylifepro
+App Name: DailyLife Pro
+
+⚠️ IMPORTANT:
+- If you lose this keystore, you CANNOT update your app on Play Store!
+- Keep a backup in Google Drive / USB / Email
+- Never share passwords publicly
+===========================================
