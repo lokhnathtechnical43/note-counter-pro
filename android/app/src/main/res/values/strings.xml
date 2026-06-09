@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">DailyLife Pro</string>
+    <string name="title_activity_main">DailyLife Pro</string>
+    <string name="package_name">com.lokhnathtechnical.dailylifepro</string>
+    <string name="custom_url_scheme">com.lokhnathtechnical.dailylifepro</string>
+</resources>
