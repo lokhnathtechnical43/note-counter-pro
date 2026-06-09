@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Progress } from '@/components/ui/progress'
@@ -29,7 +30,7 @@ import {
   ChevronRight, MoreVertical, Star, StarOff, RefreshCw, Activity,
   PieChart, BarChart3, Users, Settings, HelpCircle, Info, ArrowRight,
   Hash, IndianRupee, Scan, FileImage, FileEdit, FileType, Pause, Play, Grid3X3, List, History,
-  Smartphone, Share2, FolderOpen
+  Smartphone, Share2, FolderOpen, Copy, Globe
 } from 'lucide-react'
 
 // ============ TYPES ============
@@ -1551,15 +1552,21 @@ const NotesPage = memo(function NotesPage() {
 // ============ NOTE COUNTER ============
 const NoteCounterPage = memo(function NoteCounterPage() {
   const language = useAppStore(state => state.language)
+  const setLanguage = useAppStore(state => state.setLanguage)
+
+  // ===== TAB STATE =====
+  const [activeTab, setActiveTab] = useState<'counter' | 'calc' | 'billing' | 'khata'>('counter')
+
+  // ===== COUNTER STATE (existing) =====
   const [counts, setCounts] = useState<Record<string, number>>({
     '500': 0, '200': 0, '100': 0, '50': 0, '20': 0, '10': 0, '5': 0, '2': 0, '1': 0
   })
   const [savedCounts, setSavedCounts] = useState<Array<{ id: string; date: string; counts: Record<string, number>; total: number; category?: string; remark?: string; personName?: string; mobileNumber?: string; accountNumber?: string; entryType?: 'in' | 'out' }>>([])
   const [showSaved, setShowSaved] = useState(false)
-  const [showCalc, setShowCalc] = useState(false)
-  const [showCalcHistory, setShowCalcHistory] = useState(false)
+  const [otherAmount, setOtherAmount] = useState<string>('')
+  const [onlineAmount, setOnlineAmount] = useState<number>(0)
 
-  // Extra entry fields (like the reference app)
+  // Extra entry fields
   const [category, setCategory] = useState('')
   const [remark, setRemark] = useState('')
   const [personName, setPersonName] = useState('')
@@ -1569,26 +1576,61 @@ const NoteCounterPage = memo(function NoteCounterPage() {
   const [targetAmount, setTargetAmount] = useState<string>('')
   const [targetMode, setTargetMode] = useState<'payable' | 'receivable'>('payable')
 
-  // Calculator state
+  // ===== CALC STATE (GST Calculator) =====
   const [calcDisplay, setCalcDisplay] = useState('0')
   const [calcPrevious, setCalcPrevious] = useState<string | null>(null)
   const [calcOperation, setCalcOperation] = useState<string | null>(null)
   const [calcReset, setCalcReset] = useState(false)
   const [calcExpression, setCalcExpression] = useState('')
-
-  // Calculator history
   const [calcHistory, setCalcHistory] = useState<Array<{ id: string; expression: string; result: string; date: string; fromNoteCount?: boolean }>>([])
+  const [showCalcHistory, setShowCalcHistory] = useState(false)
+  const [gstRates, setGstRates] = useState<number[]>([3, 5, 12, 18, 28])
+  const [showEditGst, setShowEditGst] = useState(false)
+  const [editGstInput, setEditGstInput] = useState('')
+
+  // ===== BILLING STATE =====
+  interface BillingItem { id: string; name: string; qty: number; rate: number; amount: number }
+  interface SavedBill { id: string; date: string; items: BillingItem[]; customerName: string; mobile: string; address: string; discount: number; totalAmount: number; totalQty: number }
+  const [billingItems, setBillingItems] = useState<BillingItem[]>([])
+  const [showAddItem, setShowAddItem] = useState(false)
+  const [newItemName, setNewItemName] = useState('')
+  const [newItemQty, setNewItemQty] = useState('1')
+  const [newItemRate, setNewItemRate] = useState('')
+  const [billCustomerName, setBillCustomerName] = useState('')
+  const [billMobile, setBillMobile] = useState('')
+  const [billAddress, setBillAddress] = useState('')
+  const [billDiscount, setBillDiscount] = useState('')
+  const [savedBills, setSavedBills] = useState<SavedBill[]>([])
+  const [showBills, setShowBills] = useState(false)
+
+  // ===== KHATA STATE =====
+  interface KhataPerson { id: string; name: string; mobile: string; openingBalance: number; transactions: Array<{ id: string; amount: number; type: 'credit' | 'debit'; remark: string; date: string }> }
+  const [khataPersons, setKhataPersons] = useState<KhataPerson[]>([])
+  const [showAddPerson, setShowAddPerson] = useState(false)
+  const [newPersonName, setNewPersonName] = useState('')
+  const [newPersonMobile, setNewPersonMobile] = useState('')
+  const [newPersonBalance, setNewPersonBalance] = useState('')
+  const [selectedPerson, setSelectedPerson] = useState<string | null>(null)
+  const [showAddTransaction, setShowAddTransaction] = useState(false)
+  const [txnAmount, setTxnAmount] = useState('')
+  const [txnType, setTxnType] = useState<'credit' | 'debit'>('credit')
+  const [txnRemark, setTxnRemark] = useState('')
+  const [txnDate, setTxnDate] = useState(new Date().toISOString().split('T')[0])
+  const [khataSearch, setKhataSearch] = useState('')
+  const [hideKhataTotal, setHideKhataTotal] = useState(false)
+  const [showKhataMenu, setShowKhataMenu] = useState(false)
+  const [showBankHolidays, setShowBankHolidays] = useState(false)
 
   const denominations = [
-    { value: 500, label: '₹500', labelBn: '₹৫০০', color: '#FF6B35', textColor: '#fff' },
-    { value: 200, label: '₹200', labelBn: '₹২০০', color: '#FFB347', textColor: '#1a1a2e' },
-    { value: 100, label: '₹100', labelBn: '₹১০০', color: '#4CAF50', textColor: '#fff' },
-    { value: 50, label: '₹50', labelBn: '₹৫০', color: '#26A69A', textColor: '#fff' },
-    { value: 20, label: '₹20', labelBn: '₹২০', color: '#42A5F5', textColor: '#fff' },
-    { value: 10, label: '₹10', labelBn: '₹১০', color: '#AB47BC', textColor: '#fff' },
-    { value: 5, label: '₹5', labelBn: '₹৫', color: '#EC407A', textColor: '#fff' },
-    { value: 2, label: '₹2', labelBn: '₹২', color: '#5C6BC0', textColor: '#fff' },
-    { value: 1, label: '₹1', labelBn: '₹১', color: '#78909C', textColor: '#fff' },
+    { value: 500, label: '₹500', labelBn: '₹৫০০', color: '#22c55e', stripColor: '#16a34a', textColor: '#fff' },
+    { value: 200, label: '₹200', labelBn: '₹২০০', color: '#f97316', stripColor: '#ea580c', textColor: '#fff' },
+    { value: 100, label: '₹100', labelBn: '₹১০০', color: '#a855f7', stripColor: '#9333ea', textColor: '#fff' },
+    { value: 50, label: '₹50', labelBn: '₹৫০', color: '#3b82f6', stripColor: '#2563eb', textColor: '#fff' },
+    { value: 20, label: '₹20', labelBn: '₹২০', color: '#eab308', stripColor: '#ca8a04', textColor: '#1a1a2e' },
+    { value: 10, label: '₹10', labelBn: '₹১০', color: '#92400e', stripColor: '#78350f', textColor: '#fff' },
+    { value: 5, label: '₹5', labelBn: '₹৫', color: '#16a34a', stripColor: '#15803d', textColor: '#fff' },
+    { value: 2, label: '₹2', labelBn: '₹২', color: '#ea580c', stripColor: '#c2410c', textColor: '#fff' },
+    { value: 1, label: '₹1', labelBn: '₹১', color: '#9333ea', stripColor: '#7e22ce', textColor: '#fff' },
   ]
 
   // Keyboard detection for sticky bottom bar
@@ -1611,9 +1653,12 @@ const NoteCounterPage = memo(function NoteCounterPage() {
 
   const resetCounts = { '500': 0, '200': 0, '100': 0, '50': 0, '20': 0, '10': 0, '5': 0, '2': 0, '1': 0 }
 
-  const total = denominations.reduce((sum, d) => sum + (d.value * (counts[String(d.value)] || 0)), 0)
+  const cashTotal = denominations.reduce((sum, d) => sum + (d.value * (counts[String(d.value)] || 0)), 0)
+  const otherAmt = parseInt(otherAmount) || 0
+  const total = cashTotal + otherAmt + onlineAmount
   const totalNotes = Object.values(counts).reduce((s, c) => s + c, 0)
 
+  // Load persisted data
   useEffect(() => {
     try {
       const saved = localStorage.getItem('noteCounterSaved')
@@ -1622,6 +1667,18 @@ const NoteCounterPage = memo(function NoteCounterPage() {
     try {
       const hist = localStorage.getItem('noteCounterCalcHistory')
       if (hist) setCalcHistory(JSON.parse(hist))
+    } catch {}
+    try {
+      const bills = localStorage.getItem('noteCounterBills')
+      if (bills) setSavedBills(JSON.parse(bills))
+    } catch {}
+    try {
+      const persons = localStorage.getItem('noteCounterKhata')
+      if (persons) setKhataPersons(JSON.parse(persons))
+    } catch {}
+    try {
+      const rates = localStorage.getItem('noteCounterGstRates')
+      if (rates) setGstRates(JSON.parse(rates))
     } catch {}
   }, [])
 
@@ -1666,25 +1723,41 @@ const NoteCounterPage = memo(function NoteCounterPage() {
       toast({ title: language === 'bn' ? 'খালি কাউন্ট' : 'Empty Count', description: language === 'bn' ? 'শেয়ার করার আগে কিছু নোট কাউন্ট করুন।' : 'Count some notes first before sharing.', variant: 'destructive' })
       return
     }
-    let text = `💰 Note Count - ${new Date().toLocaleString('en-IN')}\n`
+    let text = `💰 Note Count Pro - ${new Date().toLocaleString('en-IN')}\n`
     text += `━━━━━━━━━━━━━━━━━━\n`
     denominations.forEach(d => {
       const c = counts[String(d.value)] || 0
       if (c > 0) text += `${d.label} × ${c} = ${formatCurrency(d.value * c)}\n`
     })
+    if (otherAmt > 0) text += `${language === 'bn' ? 'অন্যান্য' : 'Other'}: ${formatCurrency(otherAmt)}\n`
+    if (onlineAmount > 0) text += `${language === 'bn' ? 'অনলাইন' : 'Online'}: ${formatCurrency(onlineAmount)}\n`
     text += `━━━━━━━━━━━━━━━━━━\n`
     text += `📝 Total Notes: ${totalNotes}\n`
     text += `💵 Total Cash: ${formatCurrency(total)}`
     if (category) text += `\n📂 Category: ${category}`
     if (remark) text += `\n📝 Remark: ${remark}`
     if (personName) text += `\n👤 Person: ${personName}`
-
     if (navigator.share) {
-      navigator.share({ title: 'Note Count', text })
+      navigator.share({ title: 'Note Count Pro', text })
     } else {
       navigator.clipboard.writeText(text)
-      toast({ title: language === 'bn' ? 'কপি হয়েছে!' : 'Copied!', description: language === 'bn' ? 'কাউন্ট বিবরণ ক্লিপবোর্ডে কপি হয়েছে' : 'Count details copied to clipboard. You can paste and share.' })
+      toast({ title: language === 'bn' ? 'কপি হয়েছে!' : 'Copied!', description: language === 'bn' ? 'কাউন্ট বিবরণ ক্লিপবোর্ডে কপি হয়েছে' : 'Count details copied to clipboard.' })
     }
+  }
+
+  const handleCopyEntry = () => {
+    let text = `💰 Note Count Pro - ${new Date().toLocaleString('en-IN')}\n`
+    text += `━━━━━━━━━━━━━━━━━━\n`
+    denominations.forEach(d => {
+      const c = counts[String(d.value)] || 0
+      if (c > 0) text += `${d.label} × ${c} = ${formatCurrency(d.value * c)}\n`
+    })
+    if (otherAmt > 0) text += `${language === 'bn' ? 'অন্যান্য' : 'Other'}: ${formatCurrency(otherAmt)}\n`
+    if (onlineAmount > 0) text += `${language === 'bn' ? 'অনলাইন' : 'Online'}: ${formatCurrency(onlineAmount)}\n`
+    text += `━━━━━━━━━━━━━━━━━━\n`
+    text += `💵 Total: ${formatCurrency(total)}`
+    navigator.clipboard.writeText(text)
+    toast({ title: language === 'bn' ? 'কপি হয়েছে!' : 'Copied!', description: language === 'bn' ? 'এন্ট্রি কপি হয়েছে' : 'Entry details copied.' })
   }
 
   const handleShareSaved = (entry: { id: string; date: string; counts: Record<string, number>; total: number }) => {
@@ -1696,7 +1769,6 @@ const NoteCounterPage = memo(function NoteCounterPage() {
     })
     text += `━━━━━━━━━━━━━━━━━━\n`
     text += `💵 Total Cash: ${formatCurrency(entry.total)}`
-
     if (navigator.share) {
       navigator.share({ title: 'Note Count', text })
     } else {
@@ -1705,7 +1777,7 @@ const NoteCounterPage = memo(function NoteCounterPage() {
     }
   }
 
-  // Calculator functions
+  // ===== CALCULATOR FUNCTIONS =====
   const calcHandleNumber = (num: string) => {
     if (calcReset) { setCalcDisplay(num); setCalcReset(false) }
     else setCalcDisplay(calcDisplay === '0' ? num : calcDisplay + num)
@@ -1732,17 +1804,10 @@ const NoteCounterPage = memo(function NoteCounterPage() {
     }
     const resultStr = String(Math.round(result * 100000000) / 100000000)
     const expressionStr = `${formatCurrency(prev)} ${calcOperation} ${formatCurrency(curr)} = ${formatCurrency(result)}`
-
     if (addToHistory) {
-      const newEntry = {
-        id: Date.now().toString(),
-        expression: expressionStr,
-        result: resultStr,
-        date: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
-      }
+      const newEntry = { id: Date.now().toString(), expression: expressionStr, result: resultStr, date: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) }
       saveCalcHistory([newEntry, ...calcHistory])
     }
-
     setCalcDisplay(resultStr)
     setCalcExpression('')
     setCalcPrevious(null)
@@ -1752,39 +1817,46 @@ const NoteCounterPage = memo(function NoteCounterPage() {
 
   const calcClear = () => { setCalcDisplay('0'); setCalcPrevious(null); setCalcOperation(null); setCalcExpression('') }
   const calcPercent = () => setCalcDisplay(String(parseFloat(calcDisplay) / 100))
-  const calcToggleSign = () => setCalcDisplay(String(-parseFloat(calcDisplay)))
-  const calcDecimal = () => { if (!calcDisplay.includes('.')) setCalcDisplay(calcDisplay + '.') }
-
   const calcBackspace = () => {
     if (calcReset) return
-    if (calcDisplay.length <= 1 || (calcDisplay.length === 2 && calcDisplay.startsWith('-'))) {
-      setCalcDisplay('0')
-    } else {
-      setCalcDisplay(calcDisplay.slice(0, -1))
-    }
+    if (calcDisplay.length <= 1 || (calcDisplay.length === 2 && calcDisplay.startsWith('-'))) setCalcDisplay('0')
+    else setCalcDisplay(calcDisplay.slice(0, -1))
   }
+  const calcDecimal = () => { if (!calcDisplay.includes('.')) setCalcDisplay(calcDisplay + '.') }
 
-  const sendTotalToCalc = () => {
-    const newEntry = {
-      id: Date.now().toString(),
-      expression: `${language === 'bn' ? 'নোট কাউন্ট থেকে' : 'From Note Count'} → ${formatCurrency(total)}`,
-      result: String(total),
-      date: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
-      fromNoteCount: true as const,
-    }
+  const applyGstRate = (rate: number, isAdd: boolean) => {
+    const current = parseFloat(calcDisplay) || 0
+    const gstAmount = current * (rate / 100)
+    const result = isAdd ? current + gstAmount : current - gstAmount
+    const resultStr = String(Math.round(result * 100) / 100)
+    const label = isAdd ? 'GST+' : 'GST-'
+    const newEntry = { id: Date.now().toString(), expression: `${formatCurrency(current)} ${label}${rate}% = ${formatCurrency(result)}`, result: resultStr, date: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) }
     saveCalcHistory([newEntry, ...calcHistory])
-    setCalcDisplay(String(total))
+    setCalcDisplay(resultStr)
     setCalcPrevious(null)
     setCalcOperation(null)
-    setCalcExpression('')
+    setCalcExpression(`${label}${rate}% on ${formatCurrency(current)}`)
     setCalcReset(true)
-    setShowCalc(true)
-    toast({ title: language === 'bn' ? 'ক্যালকুলেটরে পাঠানো হয়েছে!' : 'Sent to Calculator!', description: language === 'bn' ? `${formatCurrency(total)} ক্যালকুলেটরে ট্রান্সফার হয়েছে` : `${formatCurrency(total)} transferred to calculator.` })
   }
 
-  const clearCalcHistory = () => {
-    saveCalcHistory([])
-    toast({ title: language === 'bn' ? 'ইতিহাস মুছে ফেলা হয়েছে' : 'History Cleared', description: language === 'bn' ? 'সব ক্যালকুলেশন ইতিহাস মুছে ফেলা হয়েছে' : 'All calculation history has been cleared.' })
+  const handleEditGst = () => {
+    setEditGstInput(gstRates.join(', '))
+    setShowEditGst(true)
+  }
+
+  const saveEditGst = () => {
+    const parsed = editGstInput.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n > 0 && n <= 100)
+    if (parsed.length > 0) {
+      setGstRates(parsed)
+      localStorage.setItem('noteCounterGstRates', JSON.stringify(parsed))
+      setShowEditGst(false)
+      toast({ title: language === 'bn' ? 'GST হার আপডেট হয়েছে' : 'GST Rates Updated', description: parsed.map(r => r + '%').join(', ') })
+    }
+  }
+
+  const calcCopyResult = () => {
+    navigator.clipboard.writeText(calcDisplay)
+    toast({ title: language === 'bn' ? 'কপি হয়েছে!' : 'Copied!', description: `${formatCurrency(parseFloat(calcDisplay))} ${language === 'bn' ? 'কপি হয়েছে' : 'copied'}` })
   }
 
   const applyHistoryResult = (result: string) => {
@@ -1795,24 +1867,122 @@ const NoteCounterPage = memo(function NoteCounterPage() {
     setCalcReset(true)
   }
 
+  const clearCalcHistory = () => {
+    saveCalcHistory([])
+    toast({ title: language === 'bn' ? 'ইতিহাস মুছে ফেলা হয়েছে' : 'History Cleared', description: language === 'bn' ? 'সব ক্যালকুলেশন ইতিহাস মুছে ফেলা হয়েছে' : 'All calculation history has been cleared.' })
+  }
+
   const calcButtons = [
-    ['C', '⌫', '%', '÷'],
+    ['AC', '⌫', '%', '÷'],
     ['7', '8', '9', '×'],
     ['4', '5', '6', '-'],
     ['1', '2', '3', '+'],
-    ['0', '.', '='],
+    ['00', '0', '.', '='],
   ]
 
   const calcHandleButton = (val: string) => {
     if (val >= '0' && val <= '9') calcHandleNumber(val)
+    else if (val === '00') { if (calcReset) { setCalcDisplay('0'); setCalcReset(false) } else setCalcDisplay(calcDisplay === '0' ? '0' : calcDisplay + '00') }
     else if (['+', '-', '×', '÷'].includes(val)) calcHandleOperation(val)
     else if (val === '=') calcCalculate()
-    else if (val === 'C') calcClear()
-    else if (val === '+/-') calcToggleSign()
+    else if (val === 'AC') calcClear()
     else if (val === '%') calcPercent()
     else if (val === '.') calcDecimal()
     else if (val === '⌫') calcBackspace()
   }
+
+  // ===== BILLING FUNCTIONS =====
+  const addBillingItem = () => {
+    if (!newItemName || !newItemRate) return
+    const qty = parseInt(newItemQty) || 1
+    const rate = parseFloat(newItemRate) || 0
+    const item: BillingItem = { id: Date.now().toString(), name: newItemName, qty, rate, amount: qty * rate }
+    setBillingItems([...billingItems, item])
+    setNewItemName(''); setNewItemQty('1'); setNewItemRate('')
+    setShowAddItem(false)
+  }
+
+  const removeBillingItem = (id: string) => setBillingItems(billingItems.filter(i => i.id !== id))
+
+  const billingSubtotal = billingItems.reduce((s, i) => s + i.amount, 0)
+  const billingDiscountAmt = billingSubtotal * ((parseFloat(billDiscount) || 0) / 100)
+  const billingTotal = billingSubtotal - billingDiscountAmt
+  const billingTotalQty = billingItems.reduce((s, i) => s + i.qty, 0)
+
+  const saveBill = () => {
+    if (billingItems.length === 0) { toast({ title: language === 'bn' ? 'আইটেম যোগ করুন' : 'Add Items', variant: 'destructive' }); return }
+    const bill: SavedBill = { id: Date.now().toString(), date: new Date().toLocaleString('en-IN'), items: [...billingItems], customerName: billCustomerName, mobile: billMobile, address: billAddress, discount: parseFloat(billDiscount) || 0, totalAmount: billingTotal, totalQty: billingTotalQty }
+    const updated = [bill, ...savedBills]
+    setSavedBills(updated)
+    localStorage.setItem('noteCounterBills', JSON.stringify(updated))
+    setBillingItems([]); setBillCustomerName(''); setBillMobile(''); setBillAddress(''); setBillDiscount('')
+    toast({ title: language === 'bn' ? 'বিল সেভ হয়েছে!' : 'Bill Saved!', description: `${formatCurrency(billingTotal)}` })
+  }
+
+  const deleteBill = (id: string) => {
+    const updated = savedBills.filter(b => b.id !== id)
+    setSavedBills(updated)
+    localStorage.setItem('noteCounterBills', JSON.stringify(updated))
+  }
+
+  const shareBill = (bill: SavedBill) => {
+    let text = `🧾 Bill - ${bill.date}\n━━━━━━━━━━━━━━━━━━\n`
+    bill.items.forEach(i => { text += `${i.name} × ${i.qty} @ ${formatCurrency(i.rate)} = ${formatCurrency(i.amount)}\n` })
+    if (bill.discount > 0) text += `${language === 'bn' ? 'ডিসকাউন্ট' : 'Discount'}: ${bill.discount}%\n`
+    text += `━━━━━━━━━━━━━━━━━━\n💵 ${language === 'bn' ? 'মোট' : 'Total'}: ${formatCurrency(bill.totalAmount)}`
+    if (bill.customerName) text += `\n👤 ${bill.customerName}`
+    if (navigator.share) navigator.share({ title: 'Bill', text })
+    else { navigator.clipboard.writeText(text); toast({ title: language === 'bn' ? 'কপি হয়েছে!' : 'Copied!' }) }
+  }
+
+  // ===== KHATA FUNCTIONS =====
+  const addKhataPerson = () => {
+    if (!newPersonName) return
+    const person: KhataPerson = { id: Date.now().toString(), name: newPersonName, mobile: newPersonMobile, openingBalance: parseFloat(newPersonBalance) || 0, transactions: [] }
+    const updated = [...khataPersons, person]
+    setKhataPersons(updated)
+    localStorage.setItem('noteCounterKhata', JSON.stringify(updated))
+    setNewPersonName(''); setNewPersonMobile(''); setNewPersonBalance('')
+    setShowAddPerson(false)
+  }
+
+  const addTransaction = () => {
+    if (!selectedPerson || !txnAmount) return
+    const amt = parseFloat(txnAmount) || 0
+    if (amt <= 0) return
+    const updated = khataPersons.map(p => {
+      if (p.id === selectedPerson) {
+        return { ...p, transactions: [...p.transactions, { id: Date.now().toString(), amount: amt, type: txnType, remark: txnRemark, date: txnDate }] }
+      }
+      return p
+    })
+    setKhataPersons(updated)
+    localStorage.setItem('noteCounterKhata', JSON.stringify(updated))
+    setTxnAmount(''); setTxnRemark(''); setTxnDate(new Date().toISOString().split('T')[0])
+    setShowAddTransaction(false)
+  }
+
+  const deletePerson = (id: string) => {
+    const updated = khataPersons.filter(p => p.id !== id)
+    setKhataPersons(updated)
+    localStorage.setItem('noteCounterKhata', JSON.stringify(updated))
+    if (selectedPerson === id) setSelectedPerson(null)
+  }
+
+  const getPersonBalance = (p: KhataPerson) => {
+    const creditTotal = p.transactions.filter(t => t.type === 'credit').reduce((s, t) => s + t.amount, 0)
+    const debitTotal = p.transactions.filter(t => t.type === 'debit').reduce((s, t) => s + t.amount, 0)
+    return p.openingBalance + debitTotal - creditTotal
+  }
+
+  const getPersonDebitTotal = (p: KhataPerson) => p.transactions.filter(t => t.type === 'debit').reduce((s, t) => s + t.amount, 0)
+  const getPersonCreditTotal = (p: KhataPerson) => p.transactions.filter(t => t.type === 'credit').reduce((s, t) => s + t.amount, 0)
+
+  const khataTotalCredit = khataPersons.reduce((s, p) => s + getPersonCreditTotal(p), 0)
+  const khataTotalDebit = khataPersons.reduce((s, p) => s + getPersonDebitTotal(p), 0)
+  const khataGrandTotal = khataPersons.reduce((s, p) => s + getPersonBalance(p), 0)
+
+  const filteredPersons = khataPersons.filter(p => p.name.toLowerCase().includes(khataSearch.toLowerCase()) || p.mobile.includes(khataSearch))
 
   // Calculate Payable/Receivable difference
   const targetNum = parseInt(targetAmount) || 0
@@ -1820,188 +1990,267 @@ const NoteCounterPage = memo(function NoteCounterPage() {
 
   const resetAll = () => {
     setCounts({ ...resetCounts })
-    setCategory('')
-    setRemark('')
-    setPersonName('')
-    setMobileNumber('')
-    setAccountNumber('')
-    setTargetAmount('')
+    setCategory(''); setRemark(''); setPersonName(''); setMobileNumber(''); setAccountNumber(''); setTargetAmount(''); setOtherAmount(''); setOnlineAmount(0)
   }
+
+  // Bank Holidays data
+  const bankHolidays = [
+    { date: '2026-01-26', name: 'Republic Day / প্রজাতন্ত্র দিবস' },
+    { date: '2026-03-14', name: 'Holi / হোলি' },
+    { date: '2026-04-02', name: 'Ram Navami / রাম নবমী' },
+    { date: '2026-04-14', name: 'Ambedkar Jayanti / আম্বেদকর জয়ন্তী' },
+    { date: '2026-05-01', name: 'May Day / মে দিবস' },
+    { date: '2026-08-15', name: 'Independence Day / স্বাধীনতা দিবস' },
+    { date: '2026-10-02', name: 'Gandhi Jayanti / গান্ধী জয়ন্তী' },
+    { date: '2026-10-20', name: 'Dussehra / দশেরা' },
+    { date: '2026-11-01', name: 'Diwali / দীপাবলি' },
+    { date: '2026-12-25', name: 'Christmas / বড়দিন' },
+  ]
 
   return (
     <div className="flex flex-col bg-gray-50 dark:bg-gray-950 overflow-hidden" style={{ height: keyboardHeight > 0 ? `calc(100vh - ${keyboardHeight}px)` : '100vh', transition: 'height 0.15s ease' }}>
-      {/* ===== FIXED TOP: HEADER + SUMMARY + PAYABLE/RECEIVABLE ===== */}
-      <div className="bg-white dark:bg-gray-900 shrink-0 z-30 border-b border-border/30">
-        {/* Header */}
-        <div className="px-4 py-3 flex items-center justify-between">
-          <h1 className="font-bold text-lg">{language === 'bn' ? 'নোট কাউন্টার' : 'Note Counter'}</h1>
+      {/* ===== GREEN HEADER WITH TAB BAR ===== */}
+      <div className="bg-[#006400] dark:bg-emerald-900 shrink-0 z-30">
+        {/* Header Row */}
+        <div className="px-3 py-2.5 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center">
+              <Banknote className="w-5 h-5 text-[#006400]" />
+            </div>
+            <div>
+              <h1 className="text-white font-bold text-sm leading-tight">Note Counter Pro</h1>
+              <p className="text-emerald-200 text-[10px]">Lokhnath Technical</p>
+            </div>
+          </div>
           <div className="flex items-center gap-1">
-            <button onClick={() => setShowCalc(!showCalc)} className="p-1.5 hover:bg-muted rounded-lg text-emerald-600 dark:text-emerald-400 transition-colors" title={language === 'bn' ? 'ক্যালকুলেটর' : 'Calculator'}>
-              <Calculator className="w-5 h-5" />
+            <button onClick={() => {}} className="px-2.5 py-1 bg-yellow-500 text-[#006400] rounded-full text-[10px] font-bold">
+              {language === 'bn' ? 'কার্ড বানান' : 'Make Card'}
             </button>
-            <button onClick={handleShare} className="p-1.5 hover:bg-muted rounded-lg text-blue-600 dark:text-blue-400 transition-colors" title={language === 'bn' ? 'শেয়ার' : 'Share'}>
-              <Share2 className="w-5 h-5" />
-            </button>
-            <button onClick={resetAll} className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-red-500 transition-colors" title={language === 'bn' ? 'রিসেট' : 'Reset'}>
-              <RefreshCw className="w-5 h-5" />
-            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="p-1.5 text-white hover:bg-white/10 rounded-lg transition-colors">
+                  <MoreVertical className="w-5 h-5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem onClick={handleShare}><Share2 className="w-4 h-4 mr-2" />{language === 'bn' ? 'শেয়ার এন্ট্রি (ছবি)' : 'Share Entry (Image)'}</DropdownMenuItem>
+                <DropdownMenuItem onClick={handleShare}><FileImage className="w-4 h-4 mr-2" />{language === 'bn' ? 'শেয়ার এন্ট্রি (PDF)' : 'Share Entry (PDF)'}</DropdownMenuItem>
+                <DropdownMenuItem onClick={handleShare}><FileType className="w-4 h-4 mr-2" />{language === 'bn' ? 'শেয়ার এন্ট্রি (টেক্সট)' : 'Share Entry (Text)'}</DropdownMenuItem>
+                <DropdownMenuItem onClick={handleCopyEntry}><Copy className="w-4 h-4 mr-2" />{language === 'bn' ? 'এন্ট্রি কপি করুন' : 'Copy Entry Details'}</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setShowBankHolidays(true)}><CalendarDays className="w-4 h-4 mr-2" />{language === 'bn' ? 'ব্যাংক ছুটি' : 'Bank Holidays'}</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setLanguage(language === 'bn' ? 'en' : 'bn')}><Globe className="w-4 h-4 mr-2" />{language === 'bn' ? 'English' : 'বাংলা'}</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => {}}><Star className="w-4 h-4 mr-2" />{language === 'bn' ? '৫ স্টার দিন' : 'Give 5 Star'}</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
-        {/* Summary Bar */}
-        <div className="border-b border-border/50 px-4 py-2 flex items-center justify-center">
-          <div className="flex items-center gap-3">
-            <div className="bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
-              <span className="text-muted-foreground text-xs font-medium">N</span>
-              <span className="text-yellow-500 dark:text-yellow-400 font-bold text-lg">{totalNotes}</span>
-            </div>
-            <div className="bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
-              <span className="text-yellow-600 dark:text-yellow-500 text-xs font-bold">₹</span>
-              <span className="text-yellow-500 dark:text-yellow-400 font-bold text-lg">{total.toLocaleString('en-IN')}</span>
-            </div>
-          </div>
+        {/* Tab Bar */}
+        <div className="flex">
+          {(['counter', 'calc', 'billing', 'khata'] as const).map(tab => (
+            <button key={tab} onClick={() => setActiveTab(tab)}
+              className={`flex-1 py-2 text-xs font-bold tracking-wide transition-colors relative ${activeTab === tab ? 'text-yellow-400 bg-[#004d00]' : 'text-emerald-200 hover:text-white'}`}>
+              {tab === 'counter' && (language === 'bn' ? 'কাউন্টার' : 'COUNTER')}
+              {tab === 'calc' && (language === 'bn' ? 'ক্যালক' : 'CALC')}
+              {tab === 'billing' && (language === 'bn' ? 'বিলিং' : 'BILLING')}
+              {tab === 'khata' && (language === 'bn' ? 'খাতা' : 'KHATA')}
+              {activeTab === tab && <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-yellow-400 rounded-t" />}
+            </button>
+          ))}
         </div>
-        {/* Payable/Receivable */}
-        <div className="px-3 py-2 border-b border-border/50">
-          <div className="bg-white dark:bg-gray-900 rounded-lg border border-border overflow-hidden">
-            <div className="flex items-center justify-between p-2 pb-1">
-              <div className="flex items-center gap-1.5">
-                <Wallet className="w-3.5 h-3.5 text-yellow-500" />
-                <span className="text-muted-foreground text-xs font-medium">{language === 'bn' ? 'অ্যামাউন্ট (পে/রিসি)' : 'Amount (Pay/Rec)'}</span>
+      </div>
+
+      {/* ===== SCROLLABLE MIDDLE CONTENT ===== */}
+      <div className="flex-1 overflow-y-auto" id="note-counter-scroll">
+
+        {/* ===== COUNTER TAB ===== */}
+        {activeTab === 'counter' && (
+          <div className="px-3 pt-2 pb-2 space-y-1.5">
+            {/* Summary Bar */}
+            <div className="flex items-center justify-center gap-3 py-1.5">
+              <div className="bg-white dark:bg-gray-800 px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm border border-border">
+                <span className="text-muted-foreground text-xs font-medium">N</span>
+                <span className="text-yellow-500 dark:text-yellow-400 font-bold text-lg">{totalNotes}</span>
               </div>
-              <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden border border-border">
-                <button
-                  onClick={() => setTargetMode('payable')}
-                  className={`px-2 py-0.5 text-[10px] font-bold transition-colors ${targetMode === 'payable' ? 'bg-red-600 text-white' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                  {language === 'bn' ? 'পেয়াবল' : 'Pay'}
-                </button>
-                <button
-                  onClick={() => setTargetMode('receivable')}
-                  className={`px-2 py-0.5 text-[10px] font-bold transition-colors ${targetMode === 'receivable' ? 'bg-emerald-600 text-white' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                  {language === 'bn' ? 'রিসিভেবল' : 'Rec'}
-                </button>
+              <div className="bg-white dark:bg-gray-800 px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm border border-border">
+                <span className="text-yellow-600 dark:text-yellow-500 text-xs font-bold">₹</span>
+                <span className="text-yellow-500 dark:text-yellow-400 font-bold text-lg">{total.toLocaleString('en-IN')}</span>
               </div>
+              <button onClick={resetAll} className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-red-500 transition-colors border border-border bg-white dark:bg-gray-800" title={language === 'bn' ? 'রিসেট' : 'Reset'}>
+                <RefreshCw className="w-4 h-4" />
+              </button>
             </div>
-            <div className="px-2 pb-2 space-y-1.5">
-              <div className="flex items-center gap-1.5">
-                <span className={`text-base font-bold ${targetMode === 'payable' ? 'text-red-500 dark:text-red-400' : 'text-emerald-500 dark:text-emerald-400'}`}>₹</span>
-                <input
-                  type="number"
-                  value={targetAmount}
-                  placeholder={targetMode === 'payable' ? (language === 'bn' ? 'যত টাকা দিতে হবে...' : 'Amount to pay...') : (language === 'bn' ? 'যত টাকা পাবেন...' : 'Amount to receive...')}
-                  onChange={e => setTargetAmount(e.target.value)}
-                  className="flex-1 h-8 px-2 bg-gray-100 dark:bg-gray-800 text-foreground text-sm font-bold rounded border border-border focus:border-yellow-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none placeholder:text-muted-foreground placeholder:font-normal placeholder:text-xs"
-                  min={0}
-                />
-                {targetAmount && (
-                  <button onClick={() => setTargetAmount('')} className="text-muted-foreground hover:text-foreground p-0.5">
-                    <X className="w-4 h-4" />
-                  </button>
+
+            {/* Payable/Receivable */}
+            <div className="bg-white dark:bg-gray-900 rounded-lg border border-border overflow-hidden">
+              <div className="flex items-center justify-between p-2 pb-1">
+                <div className="flex items-center gap-1.5">
+                  <Wallet className="w-3.5 h-3.5 text-yellow-500" />
+                  <span className="text-muted-foreground text-xs font-medium">{language === 'bn' ? 'অ্যামাউন্ট (পে/রিসি)' : 'Amount (Pay/Rec)'}</span>
+                </div>
+                <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden border border-border">
+                  <button onClick={() => setTargetMode('payable')} className={`px-2 py-0.5 text-[10px] font-bold transition-colors ${targetMode === 'payable' ? 'bg-red-600 text-white' : 'text-muted-foreground'}`}>{language === 'bn' ? 'পেয়াবল' : 'Pay'}</button>
+                  <button onClick={() => setTargetMode('receivable')} className={`px-2 py-0.5 text-[10px] font-bold transition-colors ${targetMode === 'receivable' ? 'bg-emerald-600 text-white' : 'text-muted-foreground'}`}>{language === 'bn' ? 'রিসিভেবল' : 'Rec'}</button>
+                </div>
+              </div>
+              <div className="px-2 pb-2 space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <span className={`text-base font-bold ${targetMode === 'payable' ? 'text-red-500' : 'text-emerald-500'}`}>₹</span>
+                  <input type="number" value={targetAmount} placeholder={targetMode === 'payable' ? (language === 'bn' ? 'যত টাকা দিতে হবে...' : 'Amount to pay...') : (language === 'bn' ? 'যত টাকা পাবেন...' : 'Amount to receive...')} onChange={e => setTargetAmount(e.target.value)} className="flex-1 h-8 px-2 bg-gray-100 dark:bg-gray-800 text-foreground text-sm font-bold rounded border border-border focus:border-yellow-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none placeholder:text-muted-foreground placeholder:font-normal placeholder:text-xs" min={0} />
+                  {targetAmount && <button onClick={() => setTargetAmount('')} className="text-muted-foreground hover:text-foreground p-0.5"><X className="w-4 h-4" /></button>}
+                </div>
+                {targetNum > 0 && (
+                  <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-2 border border-border">
+                    {tallyDiff === 0 ? (
+                      <div className="bg-emerald-900/30 border border-emerald-600/40 rounded-lg p-1.5 text-center"><p className="text-emerald-400 text-xs font-bold">✓ {language === 'bn' ? 'সমান! হিসাব মিলেছে' : 'Equal! Tally matched'}</p></div>
+                    ) : targetMode === 'payable' ? (
+                      tallyDiff > 0 ? (
+                        <div className="bg-emerald-900/30 border border-emerald-600/40 rounded-lg p-1.5"><p className="text-emerald-400 text-[10px]">{language === 'bn' ? 'বেশি হয়েছে' : 'Excess'}</p><p className="text-emerald-300 text-sm font-bold">{formatCurrency(Math.abs(tallyDiff))}</p></div>
+                      ) : (
+                        <div className="bg-red-900/30 border border-red-600/40 rounded-lg p-1.5"><p className="text-red-400 text-[10px]">{language === 'bn' ? 'কম হয়েছে' : 'Shortfall'}</p><p className="text-red-300 text-sm font-bold">{formatCurrency(Math.abs(tallyDiff))}</p></div>
+                      )
+                    ) : tallyDiff > 0 ? (
+                      <div className="bg-amber-900/30 border border-amber-600/40 rounded-lg p-1.5"><p className="text-amber-400 text-[10px]">{language === 'bn' ? 'বেশি পাওয়া' : 'Excess Recv'}</p><p className="text-amber-300 text-sm font-bold">{formatCurrency(Math.abs(tallyDiff))}</p></div>
+                    ) : (
+                      <div className="bg-blue-900/30 border border-blue-600/40 rounded-lg p-1.5"><p className="text-blue-400 text-[10px]">{language === 'bn' ? 'কম পাওয়া' : 'Shortfall Recv'}</p><p className="text-blue-300 text-sm font-bold">{formatCurrency(Math.abs(tallyDiff))}</p></div>
+                    )}
+                  </div>
                 )}
               </div>
-
-              {/* Live Tally Result */}
-              {targetNum > 0 && (
-                <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-2 border border-border">
-                  {tallyDiff === 0 ? (
-                    <div className="bg-emerald-900/30 border border-emerald-600/40 rounded-lg p-1.5 text-center">
-                      <p className="text-emerald-400 text-xs font-bold">✓ {language === 'bn' ? 'সমান! হিসাব মিলেছে' : 'Equal! Tally matched'}</p>
-                    </div>
-                  ) : targetMode === 'payable' ? (
-                    tallyDiff > 0 ? (
-                      <div className="flex items-center justify-between bg-emerald-900/30 border border-emerald-600/40 rounded-lg p-1.5">
-                        <div>
-                          <p className="text-emerald-400 text-[10px]">{language === 'bn' ? 'বেশি হয়েছে' : 'Excess'}</p>
-                          <p className="text-emerald-300 text-sm font-bold">{formatCurrency(Math.abs(tallyDiff))}</p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-between bg-red-900/30 border border-red-600/40 rounded-lg p-1.5">
-                        <div>
-                          <p className="text-red-400 text-[10px]">{language === 'bn' ? 'কম হয়েছে' : 'Shortfall'}</p>
-                          <p className="text-red-300 text-sm font-bold">{formatCurrency(Math.abs(tallyDiff))}</p>
-                        </div>
-                      </div>
-                    )
-                  ) : tallyDiff > 0 ? (
-                    <div className="flex items-center justify-between bg-amber-900/30 border border-amber-600/40 rounded-lg p-1.5">
-                      <div>
-                        <p className="text-amber-400 text-[10px]">{language === 'bn' ? 'বেশি পাওয়া' : 'Excess Recv'}</p>
-                        <p className="text-amber-300 text-sm font-bold">{formatCurrency(Math.abs(tallyDiff))}</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between bg-blue-900/30 border border-blue-600/40 rounded-lg p-1.5">
-                      <div>
-                        <p className="text-blue-400 text-[10px]">{language === 'bn' ? 'কম পাওয়া' : 'Shortfall Recv'}</p>
-                        <p className="text-blue-300 text-sm font-bold">{formatCurrency(Math.abs(tallyDiff))}</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
-          </div>
-        </div>
-      </div>
 
-      {/* ===== SCROLLABLE MIDDLE: NOTE ROWS + ENTRY DETAILS + CALCULATOR ===== */}
-      <div className="flex-1 overflow-y-auto pb-2 px-3 pt-2 space-y-1.5" id="note-counter-scroll">
-        {denominations.map(d => {
-          const count = counts[String(d.value)] || 0
-          const subtotal = d.value * count
-          return (
-            <div key={d.value} className="flex items-center gap-2 bg-white dark:bg-gray-900 rounded-lg border border-border overflow-hidden">
-              <div className="w-14 h-11 flex items-center justify-center font-bold text-sm shrink-0" style={{ backgroundColor: d.color, color: d.textColor }}>
-                {language === 'bn' ? d.labelBn : d.label}
+            {/* Denomination Rows with color strips */}
+            {denominations.map(d => {
+              const count = counts[String(d.value)] || 0
+              const subtotal = d.value * count
+              return (
+                <div key={d.value} className="flex items-center bg-white dark:bg-gray-900 rounded-lg border border-border overflow-hidden shadow-sm">
+                  <div className="w-1.5 h-11 shrink-0" style={{ backgroundColor: d.stripColor }} />
+                  <div className="w-12 h-11 flex items-center justify-center font-bold text-xs shrink-0" style={{ backgroundColor: d.color, color: d.textColor }}>
+                    {language === 'bn' ? d.labelBn : d.label}
+                  </div>
+                  <div className="flex-1 flex items-center gap-1 px-1">
+                    <button onClick={() => setCounts({ ...counts, [d.value]: Math.max(0, count - 1) })} className="w-7 h-7 rounded-full bg-red-100 dark:bg-red-900/60 text-red-600 dark:text-red-400 flex items-center justify-center text-sm font-bold active:scale-90 transition-transform border border-red-200 dark:border-red-700/40">−</button>
+                    <input type="number" value={count || ''} placeholder="0" onChange={e => setCounts({ ...counts, [d.value]: parseInt(e.target.value) || 0 })} onFocus={e => { setTimeout(() => { e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }) }, 300) }} className="w-10 h-8 text-center bg-gray-100 dark:bg-gray-800 text-foreground text-sm font-medium rounded border border-border focus:border-emerald-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" min={0} />
+                    <button onClick={() => setCounts({ ...counts, [d.value]: count + 1 })} className="w-7 h-7 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-sm font-bold active:scale-90 transition-transform border border-emerald-200 dark:border-emerald-700/40">+</button>
+                  </div>
+                  <div className="w-20 text-right pr-3 shrink-0">
+                    <span className="text-yellow-500 dark:text-yellow-400 text-sm font-bold">{subtotal > 0 ? formatCurrency(subtotal) : ''}</span>
+                  </div>
+                </div>
+              )
+            })}
+
+            {/* Other Amount */}
+            <div className="flex items-center bg-white dark:bg-gray-900 rounded-lg border border-border overflow-hidden shadow-sm">
+              <div className="w-1.5 h-11 shrink-0 bg-amber-500" />
+              <div className="w-12 h-11 flex items-center justify-center font-bold text-xs shrink-0 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">
+                {language === 'bn' ? 'অন্য' : 'OTHER'}
               </div>
-              <div className="flex-1 flex items-center gap-1 px-1">
-                <span className="text-muted-foreground text-xs">×</span>
-                <button onClick={() => setCounts({ ...counts, [d.value]: Math.max(0, count - 1) })} className="w-7 h-7 rounded-full bg-red-100 dark:bg-red-900/60 text-red-600 dark:text-red-400 flex items-center justify-center text-sm font-bold active:scale-90 transition-transform border border-red-200 dark:border-red-700/40">−</button>
-                <input type="number" value={count || ''} placeholder="0" onChange={e => setCounts({ ...counts, [d.value]: parseInt(e.target.value) || 0 })} onFocus={e => { setTimeout(() => { e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }) }, 300) }} className="w-10 h-8 text-center bg-gray-100 dark:bg-gray-800 text-foreground text-sm font-medium rounded border border-border focus:border-emerald-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" min={0} />
-                <button onClick={() => setCounts({ ...counts, [d.value]: count + 1 })} className="w-7 h-7 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-sm font-bold active:scale-90 transition-transform border border-emerald-200 dark:border-emerald-700/40">+</button>
+              <div className="flex-1 px-2">
+                <input type="number" value={otherAmount} placeholder={language === 'bn' ? 'অন্য পরিমাণ...' : 'Other amount...'} onChange={e => setOtherAmount(e.target.value)} className="w-full h-8 bg-gray-100 dark:bg-gray-800 text-foreground text-sm font-bold rounded border border-border focus:border-amber-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none placeholder:text-muted-foreground placeholder:font-normal placeholder:text-xs px-2" min={0} />
               </div>
               <div className="w-20 text-right pr-3 shrink-0">
-                <span className="text-yellow-500 dark:text-yellow-400 text-sm font-bold">{subtotal > 0 ? formatCurrency(subtotal) : ''}</span>
+                <span className="text-amber-500 dark:text-amber-400 text-sm font-bold">{otherAmt > 0 ? formatCurrency(otherAmt) : ''}</span>
               </div>
             </div>
-          )
-        })}
 
-      {/* ===== ENTRY DETAILS ===== */}
-      <div className="px-3 pt-2">
-        <div className="bg-white dark:bg-gray-900 rounded-lg border border-border p-3 space-y-2">
-          <div className="flex items-center gap-2">
-            <FileText className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
-            <span className="text-muted-foreground text-sm font-medium">{language === 'bn' ? 'এন্ট্রি বিবরণ' : 'Entry Details'}</span>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <input value={category} onChange={e => setCategory(e.target.value)} onFocus={e => { setTimeout(() => { e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }) }, 300) }} placeholder={language === 'bn' ? 'ক্যাটাগরি' : 'Category'} className="h-8 px-2 text-sm bg-gray-100 dark:bg-gray-800 text-foreground rounded border border-border focus:border-emerald-500 focus:outline-none placeholder:text-muted-foreground" />
-            <input value={remark} onChange={e => setRemark(e.target.value)} onFocus={e => { setTimeout(() => { e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }) }, 300) }} placeholder={language === 'bn' ? 'রিমার্ক' : 'Remark'} className="h-8 px-2 text-sm bg-gray-100 dark:bg-gray-800 text-foreground rounded border border-border focus:border-emerald-500 focus:outline-none placeholder:text-muted-foreground" />
-            <input value={personName} onChange={e => setPersonName(e.target.value)} onFocus={e => { setTimeout(() => { e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }) }, 300) }} placeholder={language === 'bn' ? 'ব্যক্তির নাম' : 'Person Name'} className="h-8 px-2 text-sm bg-gray-100 dark:bg-gray-800 text-foreground rounded border border-border focus:border-emerald-500 focus:outline-none placeholder:text-muted-foreground" />
-            <input value={mobileNumber} onChange={e => setMobileNumber(e.target.value)} onFocus={e => { setTimeout(() => { e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }) }, 300) }} placeholder={language === 'bn' ? 'মোবাইল নম্বর' : 'Mobile Number'} className="h-8 px-2 text-sm bg-gray-100 dark:bg-gray-800 text-foreground rounded border border-border focus:border-emerald-500 focus:outline-none placeholder:text-muted-foreground" />
-          </div>
-          <input value={accountNumber} onChange={e => setAccountNumber(e.target.value)} onFocus={e => { setTimeout(() => { e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }) }, 300) }} placeholder={language === 'bn' ? 'অ্যাকাউন্ট নম্বর' : 'Account Number'} className="w-full h-8 px-2 text-sm bg-gray-100 dark:bg-gray-800 text-foreground rounded border border-border focus:border-emerald-500 focus:outline-none placeholder:text-muted-foreground" />
-        </div>
-      </div>
-
-      {/* ===== CALCULATOR ===== */}
-      {showCalc && (
-        <div className="px-3 pt-3">
-          <div className="rounded-xl overflow-hidden border border-gray-800">
-            <div className="flex items-center justify-between p-3 bg-gray-900">
-              <div className="flex items-center gap-2">
-                <Calculator className="w-4 h-4 text-emerald-400" />
-                <span className="text-gray-300 text-sm font-medium">{language === 'bn' ? 'ক্যালকুলেটর' : 'Calculator'}</span>
+            {/* Online Amount */}
+            <div className="flex items-center bg-white dark:bg-gray-900 rounded-lg border border-border overflow-hidden shadow-sm">
+              <div className="w-1.5 h-11 shrink-0 bg-blue-500" />
+              <div className="w-12 h-11 flex items-center justify-center font-bold text-xs shrink-0 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
+                {language === 'bn' ? 'অনলাইন' : 'ONLINE'}
               </div>
-              <div className="flex items-center gap-2">
-                <button onClick={() => setShowCalcHistory(!showCalcHistory)} className={`text-gray-400 hover:text-white p-1 transition-colors ${showCalcHistory ? 'text-emerald-400' : ''}`}><History className="w-4 h-4" /></button>
-                <button onClick={() => setShowCalc(false)} className="text-gray-400 hover:text-white p-1"><X className="w-4 h-4" /></button>
+              <div className="flex-1 flex items-center gap-1 px-1">
+                <button onClick={() => setOnlineAmount(Math.max(0, onlineAmount - 100))} className="w-7 h-7 rounded-full bg-red-100 dark:bg-red-900/60 text-red-600 dark:text-red-400 flex items-center justify-center text-sm font-bold active:scale-90 transition-transform border border-red-200 dark:border-red-700/40">−</button>
+                <span className="flex-1 text-center text-foreground text-sm font-bold">{onlineAmount > 0 ? onlineAmount.toLocaleString('en-IN') : '0'}</span>
+                <button onClick={() => setOnlineAmount(onlineAmount + 100)} className="w-7 h-7 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-sm font-bold active:scale-90 transition-transform border border-emerald-200 dark:border-emerald-700/40">+</button>
+              </div>
+              <div className="w-20 text-right pr-3 shrink-0">
+                <span className="text-blue-500 dark:text-blue-400 text-sm font-bold">{onlineAmount > 0 ? formatCurrency(onlineAmount) : ''}</span>
               </div>
             </div>
+
+            {/* Entry Details */}
+            <div className="bg-white dark:bg-gray-900 rounded-lg border border-border p-3 space-y-2 shadow-sm">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-emerald-500" />
+                <span className="text-muted-foreground text-sm font-medium">{language === 'bn' ? 'এন্ট্রি বিবরণ' : 'Entry Details'}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <input value={category} onChange={e => setCategory(e.target.value)} placeholder={language === 'bn' ? 'ক্যাটাগরি' : 'Category'} className="h-8 px-2 text-sm bg-gray-100 dark:bg-gray-800 text-foreground rounded border border-border focus:border-emerald-500 focus:outline-none placeholder:text-muted-foreground" />
+                <input value={remark} onChange={e => setRemark(e.target.value)} placeholder={language === 'bn' ? 'রিমার্ক' : 'Remark'} className="h-8 px-2 text-sm bg-gray-100 dark:bg-gray-800 text-foreground rounded border border-border focus:border-emerald-500 focus:outline-none placeholder:text-muted-foreground" />
+                <input value={personName} onChange={e => setPersonName(e.target.value)} placeholder={language === 'bn' ? 'ব্যক্তির নাম' : 'Person Name'} className="h-8 px-2 text-sm bg-gray-100 dark:bg-gray-800 text-foreground rounded border border-border focus:border-emerald-500 focus:outline-none placeholder:text-muted-foreground" />
+                <input value={mobileNumber} onChange={e => setMobileNumber(e.target.value)} placeholder={language === 'bn' ? 'মোবাইল নম্বর' : 'Mobile Number'} className="h-8 px-2 text-sm bg-gray-100 dark:bg-gray-800 text-foreground rounded border border-border focus:border-emerald-500 focus:outline-none placeholder:text-muted-foreground" />
+              </div>
+              <input value={accountNumber} onChange={e => setAccountNumber(e.target.value)} placeholder={language === 'bn' ? 'অ্যাকাউন্ট নম্বর' : 'Account Number'} className="w-full h-8 px-2 text-sm bg-gray-100 dark:bg-gray-800 text-foreground rounded border border-border focus:border-emerald-500 focus:outline-none placeholder:text-muted-foreground" />
+            </div>
+
+            {/* Saved Entries */}
+            {showSaved && (
+              <div className="bg-white dark:bg-gray-900 rounded-lg border border-border overflow-hidden shadow-sm">
+                <div className="flex items-center justify-between p-3 border-b border-border">
+                  <div className="flex items-center gap-2"><FolderOpen className="w-4 h-4 text-emerald-500" /><span className="text-muted-foreground text-sm font-medium">{language === 'bn' ? 'সেভ করা এন্ট্রি' : 'Saved Entries'} ({savedCounts.length})</span></div>
+                  <button onClick={() => setShowSaved(false)} className="text-muted-foreground hover:text-foreground p-1"><X className="w-4 h-4" /></button>
+                </div>
+                {savedCounts.length === 0 ? (
+                  <p className="text-muted-foreground text-sm text-center py-6">{language === 'bn' ? 'এখনও কোনো সেভ করা এন্ট্রি নেই' : 'No saved entries yet'}</p>
+                ) : (
+                  <div className="divide-y divide-border max-h-64 overflow-y-auto">
+                    {savedCounts.map(entry => (
+                      <div key={entry.id} className="p-3 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${entry.entryType === 'in' ? 'bg-emerald-900/60 text-emerald-400' : 'bg-red-900/60 text-red-400'}`}>{entry.entryType === 'in' ? (language === 'bn' ? 'ইন' : 'IN') : (language === 'bn' ? 'আউট' : 'OUT')}</span>
+                            <span className="text-yellow-400 font-bold text-sm">{formatCurrency(entry.total)}</span>
+                          </div>
+                          <div className="flex gap-1">
+                            <button onClick={() => handleShareSaved(entry)} className="p-1.5 text-blue-400 hover:bg-blue-900/30 rounded"><Share2 className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => handleDelete(entry.id)} className="p-1.5 text-red-400 hover:bg-red-900/30 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-[10px] text-gray-500">
+                          <span>{entry.date}</span>
+                          {entry.category && <span>• {entry.category}</span>}
+                          {entry.personName && <span>• {entry.personName}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ===== CALC TAB (GST Calculator) ===== */}
+        {activeTab === 'calc' && (
+          <div className="bg-gray-950 min-h-full flex flex-col">
+            {/* Function Buttons */}
+            <div className="grid grid-cols-4 gap-1 p-2 bg-gray-900">
+              <button onClick={handleEditGst} className="py-2 text-xs font-bold bg-gray-700 text-yellow-400 rounded-lg active:scale-95 transition-transform">{language === 'bn' ? 'GST সম্পাদনা' : 'EDIT GST'}</button>
+              <button onClick={calcCopyResult} className="py-2 text-xs font-bold bg-gray-700 text-blue-400 rounded-lg active:scale-95 transition-transform">{language === 'bn' ? 'কপি' : 'COPY'}</button>
+              <button onClick={() => setShowCalcHistory(!showCalcHistory)} className="py-2 text-xs font-bold bg-gray-700 text-emerald-400 rounded-lg active:scale-95 transition-transform">{language === 'bn' ? 'দেখুন' : 'VIEW'}</button>
+              <button onClick={() => { calcCalculate(true); toast({ title: language === 'bn' ? 'সেভ হয়েছে!' : 'Saved!' }) }} className="py-2 text-xs font-bold bg-gray-700 text-red-400 rounded-lg active:scale-95 transition-transform">{language === 'bn' ? 'সেভ' : 'SAVE'}</button>
+            </div>
+
+            {/* GST Buttons */}
+            <div className="px-2 space-y-1">
+              <div className="grid grid-cols-5 gap-1">
+                {gstRates.map(rate => (
+                  <button key={`add-${rate}`} onClick={() => applyGstRate(rate, true)} className="py-2.5 text-[10px] font-bold bg-emerald-700 text-white rounded-lg active:scale-95 transition-transform hover:bg-emerald-600">GST+{rate}%</button>
+                ))}
+              </div>
+              <div className="grid grid-cols-5 gap-1">
+                {gstRates.map(rate => (
+                  <button key={`sub-${rate}`} onClick={() => applyGstRate(rate, false)} className="py-2.5 text-[10px] font-bold bg-red-700 text-white rounded-lg active:scale-95 transition-transform hover:bg-red-600">GST-{rate}%</button>
+                ))}
+              </div>
+            </div>
+
+            {/* History Panel */}
             {showCalcHistory && (
-              <div className="bg-gray-800 border-t border-gray-700 max-h-48 overflow-y-auto">
+              <div className="bg-gray-800 border-t border-gray-700 max-h-40 overflow-y-auto mx-2 mt-2 rounded-lg">
                 <div className="flex items-center justify-between p-2 px-3 sticky top-0 bg-gray-800 z-10">
                   <span className="text-gray-400 text-xs font-medium">{language === 'bn' ? 'ইতিহাস' : 'History'} ({calcHistory.length})</span>
                   {calcHistory.length > 0 && <button onClick={clearCalcHistory} className="text-red-400 hover:text-red-300 text-xs">{language === 'bn' ? 'মুছুন' : 'Clear'}</button>}
@@ -2010,117 +2259,404 @@ const NoteCounterPage = memo(function NoteCounterPage() {
                   <p className="text-gray-500 text-xs text-center py-4">{language === 'bn' ? 'এখনও কোনো ক্যালকুলেশন নেই' : 'No calculations yet'}</p>
                 ) : (
                   <div className="space-y-1 px-2 pb-2">
-                    {calcHistory.map(entry => (
+                    {calcHistory.slice(0, 20).map(entry => (
                       <button key={entry.id} onClick={() => applyHistoryResult(entry.result)} className="w-full text-right p-2 rounded-lg hover:bg-gray-700 transition-colors group">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1">{entry.fromNoteCount && <span className="text-[10px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full">{language === 'bn' ? 'নোট' : 'Note'}</span>}</div>
-                          <p className="text-gray-500 text-[10px]">{entry.date}</p>
-                        </div>
-                        <p className="text-gray-400 text-xs">{entry.expression}</p>
-                        <p className="text-emerald-400 text-sm font-medium group-hover:text-emerald-300">= {formatCurrency(parseFloat(entry.result))}</p>
+                        <p className="text-gray-400 text-xs truncate">{entry.expression}</p>
+                        <p className="text-emerald-400 text-sm font-medium">= {formatCurrency(parseFloat(entry.result))}</p>
                       </button>
                     ))}
                   </div>
                 )}
               </div>
             )}
-            <div className="bg-gray-900 p-4 pt-3">
-              <div className="text-right mb-4 p-3 bg-gray-800 rounded-xl">
-                {calcExpression && <p className="text-gray-400 text-sm h-5 truncate">{calcExpression}</p>}
-                {!calcExpression && calcOperation && calcPrevious && <p className="text-gray-400 text-sm h-5 truncate">{formatCurrency(parseFloat(calcPrevious))} {calcOperation}</p>}
-                <p className="text-white text-3xl font-light truncate">{calcDisplay.includes('.') ? calcDisplay : formatCurrency(parseFloat(calcDisplay))}</p>
-              </div>
-              <div className="grid grid-cols-4 gap-2">
-                {calcButtons.map((row, ri) => (
-                  row.map((btn, ci) => {
-                    const isOp = ['+', '-', '×', '÷', '='].includes(btn)
-                    const isFunc = ['C', '⌫', '%'].includes(btn)
-                    const isActiveOp = calcOperation === btn && calcReset
-                    return (
-                      <button key={`${ri}-${ci}`} onClick={() => calcHandleButton(btn)}
-                        className={`h-12 rounded-xl text-lg font-medium transition-all active:scale-95 ${btn === '0' ? 'col-span-2' : ''} ${isOp ? (isActiveOp ? 'bg-emerald-300 text-gray-900' : 'bg-emerald-500 text-white hover:bg-emerald-600') : isFunc ? 'bg-gray-600 text-white hover:bg-gray-500' : 'bg-gray-700 text-white hover:bg-gray-600'}`}>
-                        {btn}
-                      </button>
-                    )
-                  })
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* ===== SAVED ENTRIES ===== */}
-      {showSaved && (
-        <div className="px-3 pt-3 pb-4">
-          <div className="bg-white dark:bg-gray-900 rounded-lg border border-border overflow-hidden">
-            <div className="flex items-center justify-between p-3 border-b border-border">
-              <div className="flex items-center gap-2">
-                <FolderOpen className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
-                <span className="text-muted-foreground text-sm font-medium">{language === 'bn' ? 'সেভ করা এন্ট্রি' : 'Saved Entries'} ({savedCounts.length})</span>
+            {/* Display */}
+            <div className="flex-1 flex flex-col justify-end">
+              <div className="px-4 py-3">
+                <div className="text-right p-4 bg-gray-900 rounded-2xl border border-gray-800">
+                  {calcExpression && <p className="text-gray-500 text-sm h-5 truncate">{calcExpression}</p>}
+                  {!calcExpression && calcOperation && calcPrevious && <p className="text-gray-500 text-sm h-5 truncate">{formatCurrency(parseFloat(calcPrevious))} {calcOperation}</p>}
+                  <p className="text-white text-3xl font-light truncate mt-1">{calcDisplay.includes('.') ? calcDisplay : formatCurrency(parseFloat(calcDisplay))}</p>
+                </div>
               </div>
-              <button onClick={() => setShowSaved(false)} className="text-muted-foreground hover:text-foreground p-1"><X className="w-4 h-4" /></button>
+
+              {/* Keypad */}
+              <div className="px-2 pb-3">
+                <div className="grid grid-cols-4 gap-1.5">
+                  {calcButtons.map((row, ri) => (
+                    row.map((btn, ci) => {
+                      const isOp = ['+', '-', '×', '÷', '='].includes(btn)
+                      const isFunc = ['AC', '⌫', '%'].includes(btn)
+                      const isActiveOp = calcOperation === btn && calcReset
+                      return (
+                        <button key={`${ri}-${ci}`} onClick={() => calcHandleButton(btn)}
+                          className={`h-13 rounded-xl text-lg font-medium transition-all active:scale-95 ${btn === '0' ? '' : ''} ${btn === '00' ? '' : ''} ${isOp ? (isActiveOp ? 'bg-emerald-300 text-gray-900' : 'bg-emerald-600 text-white hover:bg-emerald-500') : isFunc ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-gray-800 text-white hover:bg-gray-700'}`}>
+                          {btn}
+                        </button>
+                      )
+                    })
+                  ))}
+                </div>
+              </div>
             </div>
-            {savedCounts.length === 0 ? (
-              <p className="text-muted-foreground text-sm text-center py-6">{language === 'bn' ? 'এখনও কোনো সেভ করা এন্ট্রি নেই' : 'No saved entries yet'}</p>
-            ) : (
-              <div className="divide-y divide-border">
-                {savedCounts.map(entry => (
-                  <div key={entry.id} className="p-3 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${entry.entryType === 'in' ? 'bg-emerald-900/60 text-emerald-400' : 'bg-red-900/60 text-red-400'}`}>
-                          {entry.entryType === 'in' ? (language === 'bn' ? 'ইন' : 'IN') : (language === 'bn' ? 'আউট' : 'OUT')}
-                        </span>
-                        <span className="text-yellow-400 font-bold text-sm">{formatCurrency(entry.total)}</span>
-                      </div>
-                      <div className="flex gap-1">
-                        <button onClick={() => handleShareSaved(entry)} className="p-1.5 text-blue-400 hover:bg-blue-900/30 rounded"><Share2 className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => handleDelete(entry.id)} className="p-1.5 text-red-400 hover:bg-red-900/30 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 text-[10px] text-gray-500">
-                      <span>{entry.date}</span>
-                      {entry.category && <span>• {entry.category}</span>}
-                      {entry.personName && <span>• {entry.personName}</span>}
-                    </div>
+
+            {/* Edit GST Dialog */}
+            {showEditGst && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+                <div className="bg-white dark:bg-gray-900 rounded-xl p-4 w-full max-w-sm space-y-3 border border-border">
+                  <h3 className="font-bold text-lg">{language === 'bn' ? 'GST হার সম্পাদনা' : 'Edit GST Rates'}</h3>
+                  <p className="text-muted-foreground text-xs">{language === 'bn' ? 'কমা দিয়ে হার লিখুন (যেমন: 3, 5, 12, 18, 28)' : 'Enter rates separated by commas (e.g., 3, 5, 12, 18, 28)'}</p>
+                  <input value={editGstInput} onChange={e => setEditGstInput(e.target.value)} className="w-full h-10 px-3 bg-gray-100 dark:bg-gray-800 text-foreground rounded-lg border border-border focus:border-emerald-500 focus:outline-none text-sm" placeholder="3, 5, 12, 18, 28" />
+                  <div className="flex gap-2">
+                    <button onClick={() => setShowEditGst(false)} className="flex-1 py-2 rounded-lg border border-border text-sm font-medium">{language === 'bn' ? 'বাতিল' : 'Cancel'}</button>
+                    <button onClick={saveEditGst} className="flex-1 py-2 rounded-lg bg-emerald-600 text-white text-sm font-bold active:scale-95 transition-transform">{language === 'bn' ? 'সেভ' : 'Save'}</button>
                   </div>
-                ))}
+                </div>
               </div>
             )}
           </div>
-        </div>
-      )}
+        )}
+
+        {/* ===== BILLING TAB ===== */}
+        {activeTab === 'billing' && (
+          <div className="px-3 pt-2 pb-2 space-y-3">
+            {/* Search & Date */}
+            <div className="flex items-center gap-2">
+              <div className="flex-1 relative">
+                <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input className="w-full h-9 pl-8 pr-3 bg-white dark:bg-gray-900 text-sm rounded-lg border border-border focus:border-emerald-500 focus:outline-none" placeholder={language === 'bn' ? 'আইটেম খুঁজুন...' : 'Search items...'} />
+              </div>
+              <span className="text-xs text-muted-foreground whitespace-nowrap">{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}</span>
+            </div>
+
+            {/* Items List */}
+            <div className="bg-white dark:bg-gray-900 rounded-lg border border-border p-3 min-h-[120px]">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-bold text-foreground">{language === 'bn' ? 'আইটেম তালিকা' : 'Item List'}</span>
+                <span className="text-xs text-muted-foreground">{billingItems.length} {language === 'bn' ? 'আইটেম' : 'items'}</span>
+              </div>
+              {billingItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-6 text-muted-foreground">
+                  <FileText className="w-8 h-8 mb-2 opacity-40" />
+                  <p className="text-sm">{language === 'bn' ? 'আইটেম যোগ করুন' : 'Add items to create bill'}</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {billingItems.map(item => (
+                    <div key={item.id} className="flex items-center justify-between bg-gray-50 dark:bg-gray-800 p-2 rounded-lg">
+                      <div>
+                        <p className="text-sm font-medium">{item.name}</p>
+                        <p className="text-xs text-muted-foreground">{item.qty} × {formatCurrency(item.rate)}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-yellow-500">{formatCurrency(item.amount)}</span>
+                        <button onClick={() => removeBillingItem(item.id)} className="p-1 text-red-400 hover:bg-red-900/30 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Customer Info */}
+            <div className="bg-white dark:bg-gray-900 rounded-lg border border-border p-3 space-y-2">
+              <span className="text-sm font-bold text-foreground">{language === 'bn' ? 'গ্রাহক তথ্য / Customer Info' : 'Customer Info'}</span>
+              <div className="grid grid-cols-2 gap-2">
+                <input value={billDiscount} onChange={e => setBillDiscount(e.target.value)} placeholder={language === 'bn' ? 'ডিসকাউন্ট %' : 'Discount %'} className="h-8 px-2 text-sm bg-gray-100 dark:bg-gray-800 text-foreground rounded border border-border focus:border-emerald-500 focus:outline-none placeholder:text-muted-foreground" type="number" />
+                <input value={billCustomerName} onChange={e => setBillCustomerName(e.target.value)} placeholder={language === 'bn' ? 'গ্রাহকের নাম' : 'Customer Name'} className="h-8 px-2 text-sm bg-gray-100 dark:bg-gray-800 text-foreground rounded border border-border focus:border-emerald-500 focus:outline-none placeholder:text-muted-foreground" />
+              </div>
+              <input value={billMobile} onChange={e => setBillMobile(e.target.value)} placeholder={language === 'bn' ? 'মোবাইল নম্বর' : 'Mobile Number'} className="w-full h-8 px-2 text-sm bg-gray-100 dark:bg-gray-800 text-foreground rounded border border-border focus:border-emerald-500 focus:outline-none placeholder:text-muted-foreground" />
+              <input value={billAddress} onChange={e => setBillAddress(e.target.value)} placeholder={language === 'bn' ? 'ঠিকানা/মন্তব্য' : 'Address/Remark'} className="w-full h-8 px-2 text-sm bg-gray-100 dark:bg-gray-800 text-foreground rounded border border-border focus:border-emerald-500 focus:outline-none placeholder:text-muted-foreground" />
+            </div>
+
+            {/* Summary */}
+            <div className="bg-white dark:bg-gray-900 rounded-lg border border-border p-3 flex items-center justify-between">
+              <div><p className="text-xs text-muted-foreground">{language === 'bn' ? 'মোট ইউনিট/পরিমাণ' : 'Total Units/Qty'}</p><p className="font-bold">{billingTotalQty}</p></div>
+              <div className="text-right"><p className="text-xs text-muted-foreground">{language === 'bn' ? 'মোট পরিমাণ' : 'Total Amount'}</p><p className="font-bold text-yellow-500 text-lg">{formatCurrency(billingTotal)}</p></div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="grid grid-cols-3 gap-2">
+              <button onClick={() => setShowAddItem(true)} className="py-2.5 rounded-lg font-bold text-sm bg-emerald-600 text-white active:scale-95 transition-transform">{language === 'bn' ? 'আইটেম যোগ' : 'ADD ITEMS'}</button>
+              <button onClick={() => setShowBills(true)} className="py-2.5 rounded-lg font-bold text-sm bg-[#6d4c41] text-white active:scale-95 transition-transform">{language === 'bn' ? 'বিল দেখুন' : 'VIEW BILLS'}</button>
+              <button onClick={saveBill} className="py-2.5 rounded-lg font-bold text-sm bg-[#006400] text-white active:scale-95 transition-transform">{language === 'bn' ? 'বিল সেভ' : 'SAVE BILL'}</button>
+            </div>
+
+            {/* Add Item Dialog */}
+            {showAddItem && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+                <div className="bg-white dark:bg-gray-900 rounded-xl p-4 w-full max-w-sm space-y-3 border border-border">
+                  <h3 className="font-bold text-lg">{language === 'bn' ? 'আইটেম যোগ করুন' : 'Add Item'}</h3>
+                  <input value={newItemName} onChange={e => setNewItemName(e.target.value)} placeholder={language === 'bn' ? 'আইটেমের নাম' : 'Item Name'} className="w-full h-10 px-3 bg-gray-100 dark:bg-gray-800 text-foreground rounded-lg border border-border focus:border-emerald-500 focus:outline-none text-sm" />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input value={newItemQty} onChange={e => setNewItemQty(e.target.value)} placeholder={language === 'bn' ? 'পরিমাণ' : 'Quantity'} type="number" className="h-10 px-3 bg-gray-100 dark:bg-gray-800 text-foreground rounded-lg border border-border focus:border-emerald-500 focus:outline-none text-sm" />
+                    <input value={newItemRate} onChange={e => setNewItemRate(e.target.value)} placeholder={language === 'bn' ? 'মূল্য' : 'Rate'} type="number" className="h-10 px-3 bg-gray-100 dark:bg-gray-800 text-foreground rounded-lg border border-border focus:border-emerald-500 focus:outline-none text-sm" />
+                  </div>
+                  {newItemRate && newItemQty && <p className="text-sm text-muted-foreground">{language === 'bn' ? 'পরিমাণ' : 'Amount'}: {formatCurrency((parseInt(newItemQty) || 1) * (parseFloat(newItemRate) || 0))}</p>}
+                  <div className="flex gap-2">
+                    <button onClick={() => setShowAddItem(false)} className="flex-1 py-2 rounded-lg border border-border text-sm font-medium">{language === 'bn' ? 'বাতিল' : 'Cancel'}</button>
+                    <button onClick={addBillingItem} className="flex-1 py-2 rounded-lg bg-emerald-600 text-white text-sm font-bold active:scale-95 transition-transform">{language === 'bn' ? 'যোগ করুন' : 'Add'}</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* View Bills Dialog */}
+            {showBills && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+                <div className="bg-white dark:bg-gray-900 rounded-xl p-4 w-full max-w-sm max-h-[80vh] overflow-y-auto border border-border">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-bold text-lg">{language === 'bn' ? 'সেভ করা বিল' : 'Saved Bills'} ({savedBills.length})</h3>
+                    <button onClick={() => setShowBills(false)}><X className="w-5 h-5 text-muted-foreground" /></button>
+                  </div>
+                  {savedBills.length === 0 ? (
+                    <p className="text-muted-foreground text-sm text-center py-6">{language === 'bn' ? 'কোনো বিল নেই' : 'No bills saved yet'}</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {savedBills.map(bill => (
+                        <div key={bill.id} className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-bold text-sm">{formatCurrency(bill.totalAmount)}</span>
+                            <div className="flex gap-1">
+                              <button onClick={() => shareBill(bill)} className="p-1 text-blue-500"><Share2 className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => deleteBill(bill.id)} className="p-1 text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                            </div>
+                          </div>
+                          <p className="text-xs text-muted-foreground">{bill.date} • {bill.items.length} {language === 'bn' ? 'আইটেম' : 'items'}</p>
+                          {bill.customerName && <p className="text-xs text-muted-foreground">👤 {bill.customerName}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ===== KHATA TAB ===== */}
+        {activeTab === 'khata' && (
+          <div className="px-3 pt-2 pb-2 space-y-3">
+            {/* Search & Actions */}
+            <div className="flex items-center gap-2">
+              <div className="flex-1 relative">
+                <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input value={khataSearch} onChange={e => setKhataSearch(e.target.value)} className="w-full h-9 pl-8 pr-3 bg-white dark:bg-gray-900 text-sm rounded-lg border border-border focus:border-emerald-500 focus:outline-none" placeholder={language === 'bn' ? 'নাম, নম্বর দিয়ে খুঁজুন...' : 'Search by Name, Number...'} />
+              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="p-2 bg-white dark:bg-gray-900 rounded-lg border border-border"><MoreVertical className="w-4 h-4" /></button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem><Shield className="w-4 h-4 mr-2" />{language === 'bn' ? 'বিজ্ঞাপন সরান' : 'Remove Ads'}</DropdownMenuItem>
+                  <DropdownMenuItem><User className="w-4 h-4 mr-2" />{language === 'bn' ? 'প্রোফাইল সেট' : 'Set Profile'}</DropdownMenuItem>
+                  <DropdownMenuItem><StickyNote className="w-4 h-4 mr-2" />{language === 'bn' ? 'ডায়েরি' : 'Diary (Notepad)'}</DropdownMenuItem>
+                  <DropdownMenuItem><Users className="w-4 h-4 mr-2" />{language === 'bn' ? 'আরও অ্যাকাউন্ট যোগ' : 'Add More Accounts'}</DropdownMenuItem>
+                  <DropdownMenuItem><FileText className="w-4 h-4 mr-2" />{language === 'bn' ? 'মেসেজ কাস্টমাইজ' : 'Customize Message'}</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShowBankHolidays(true)}><CalendarDays className="w-4 h-4 mr-2" />{language === 'bn' ? 'ব্যাংক ছুটি' : 'Bank Holidays'}</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem><Settings className="w-4 h-4 mr-2" />{language === 'bn' ? 'সেটিংস' : 'Settings'}</DropdownMenuItem>
+                  <DropdownMenuItem><Download className="w-4 h-4 mr-2" />{language === 'bn' ? 'ডেটা এক্সপোর্ট' : 'Export Data'}</DropdownMenuItem>
+                  <DropdownMenuItem><RefreshCw className="w-4 h-4 mr-2" />{language === 'bn' ? 'ডেটা রিস্টোর' : 'Restore Data'}</DropdownMenuItem>
+                  <DropdownMenuItem><HelpCircle className="w-4 h-4 mr-2" />{language === 'bn' ? 'সাহায্য' : 'Help & Support'}</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            {/* Toggle & Filters */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">{language === 'bn' ? 'মোট লুকান' : 'HIDE TOTAL'}</span>
+                <Switch checked={hideKhataTotal} onCheckedChange={setHideKhataTotal} />
+              </div>
+              <div className="flex items-center gap-1">
+                <button className="p-1.5 bg-white dark:bg-gray-900 rounded-lg border border-border text-muted-foreground"><Search className="w-4 h-4" /></button>
+                <button className="p-1.5 bg-white dark:bg-gray-900 rounded-lg border border-border text-muted-foreground"><FileText className="w-4 h-4" /></button>
+                <button className="p-1.5 bg-white dark:bg-gray-900 rounded-lg border border-border text-muted-foreground"><Download className="w-4 h-4" /></button>
+              </div>
+            </div>
+
+            {/* Person Detail View */}
+            {selectedPerson && (() => {
+              const person = khataPersons.find(p => p.id === selectedPerson)
+              if (!person) return null
+              const balance = getPersonBalance(person)
+              const debitTotal = getPersonDebitTotal(person)
+              const creditTotal = getPersonCreditTotal(person)
+              return (
+                <div className="bg-white dark:bg-gray-900 rounded-lg border border-border p-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => setSelectedPerson(null)} className="p-1 hover:bg-muted rounded"><ChevronLeft className="w-5 h-5" /></button>
+                      <div>
+                        <p className="font-bold text-sm">{person.name}</p>
+                        {person.mobile && <p className="text-xs text-muted-foreground">{person.mobile}</p>}
+                      </div>
+                    </div>
+                    <button onClick={() => deletePerson(person.id)} className="p-1.5 text-red-400 hover:bg-red-900/30 rounded"><Trash2 className="w-4 h-4" /></button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-2"><p className="text-[10px] text-muted-foreground">{language === 'bn' ? 'ডেবিট' : 'Debit'}</p><p className="text-red-500 font-bold text-sm">{formatCurrency(debitTotal)}</p></div>
+                    <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-lg p-2"><p className="text-[10px] text-muted-foreground">{language === 'bn' ? 'ক্রেডিট' : 'Credit'}</p><p className="text-emerald-500 font-bold text-sm">{formatCurrency(creditTotal)}</p></div>
+                    <div className={`rounded-lg p-2 ${balance >= 0 ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-blue-50 dark:bg-blue-900/20'}`}><p className="text-[10px] text-muted-foreground">{language === 'bn' ? 'ব্যালেন্স' : 'Balance'}</p><p className={`font-bold text-sm ${balance >= 0 ? 'text-amber-500' : 'text-blue-500'}`}>{formatCurrency(Math.abs(balance))} {balance >= 0 ? (language === 'bn' ? 'পাওনা' : 'Dr') : (language === 'bn' ? 'দেনা' : 'Cr')}</p></div>
+                  </div>
+                  {/* Transactions */}
+                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                    {person.transactions.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">{language === 'bn' ? 'কোনো লেনদেন নেই' : 'No transactions'}</p>}
+                    {person.transactions.map(txn => (
+                      <div key={txn.id} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                        <div>
+                          <p className="text-xs font-medium">{txn.remark || (txn.type === 'credit' ? (language === 'bn' ? 'জমা' : 'Received') : (language === 'bn' ? 'উত্তোলন' : 'Given'))}</p>
+                          <p className="text-[10px] text-muted-foreground">{txn.date}</p>
+                        </div>
+                        <span className={`font-bold text-sm ${txn.type === 'credit' ? 'text-emerald-500' : 'text-red-500'}`}>{txn.type === 'credit' ? '-' : '+'}{formatCurrency(txn.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <button onClick={() => setShowAddTransaction(true)} className="w-full py-2 rounded-lg bg-emerald-600 text-white text-sm font-bold active:scale-95 transition-transform flex items-center justify-center gap-1">
+                    <Plus className="w-4 h-4" /> {language === 'bn' ? 'লেনদেন যোগ করুন' : 'Add Transaction'}
+                  </button>
+                </div>
+              )
+            })()}
+
+            {/* Person List */}
+            {!selectedPerson && (
+              <div className="space-y-2">
+                {filteredPersons.length === 0 && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Users className="w-10 h-10 mx-auto mb-2 opacity-40" />
+                    <p className="text-sm">{language === 'bn' ? 'কোনো ব্যক্তি নেই। যোগ করুন!' : 'No persons yet. Add one!'}</p>
+                  </div>
+                )}
+                {filteredPersons.map(p => {
+                  const balance = getPersonBalance(p)
+                  const debitTotal = getPersonDebitTotal(p)
+                  const creditTotal = getPersonCreditTotal(p)
+                  return (
+                    <button key={p.id} onClick={() => setSelectedPerson(p.id)} className="w-full bg-white dark:bg-gray-900 rounded-lg border border-border p-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors shadow-sm">
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-emerald-600 font-bold text-sm">{p.name.charAt(0).toUpperCase()}</div>
+                          <div>
+                            <p className="font-bold text-sm">{p.name}</p>
+                            {p.mobile && <p className="text-[10px] text-muted-foreground">{p.mobile}</p>}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className={`font-bold text-sm ${balance >= 0 ? 'text-amber-500' : 'text-blue-500'}`}>{formatCurrency(Math.abs(balance))}</p>
+                          <p className="text-[10px] text-muted-foreground">{balance >= 0 ? (language === 'bn' ? 'পাওনা' : 'Debit') : (language === 'bn' ? 'দেনা' : 'Credit')}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-4 text-[10px]">
+                        <span className="text-red-500">{language === 'bn' ? 'দিয়েছে' : 'Given'}: {formatCurrency(debitTotal)}</span>
+                        <span className="text-emerald-500">{language === 'bn' ? 'পেয়েছে' : 'Received'}: {formatCurrency(creditTotal)}</span>
+                      </div>
+                    </button>
+                  )
+                })}
+                <button onClick={() => setShowAddPerson(true)} className="w-full py-3 rounded-lg bg-[#006400] text-white text-sm font-bold active:scale-95 transition-transform flex items-center justify-center gap-1 shadow-lg">
+                  <Plus className="w-4 h-4" /> {language === 'bn' ? 'ব্যক্তি যোগ করুন' : 'Add Person'}
+                </button>
+              </div>
+            )}
+
+            {/* Add Person Dialog */}
+            {showAddPerson && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+                <div className="bg-white dark:bg-gray-900 rounded-xl p-4 w-full max-w-sm space-y-3 border border-border">
+                  <h3 className="font-bold text-lg">{language === 'bn' ? 'নতুন ব্যক্তি' : 'Add Person'}</h3>
+                  <input value={newPersonName} onChange={e => setNewPersonName(e.target.value)} placeholder={language === 'bn' ? 'নাম' : 'Name'} className="w-full h-10 px-3 bg-gray-100 dark:bg-gray-800 text-foreground rounded-lg border border-border focus:border-emerald-500 focus:outline-none text-sm" />
+                  <input value={newPersonMobile} onChange={e => setNewPersonMobile(e.target.value)} placeholder={language === 'bn' ? 'মোবাইল নম্বর' : 'Mobile Number'} className="w-full h-10 px-3 bg-gray-100 dark:bg-gray-800 text-foreground rounded-lg border border-border focus:border-emerald-500 focus:outline-none text-sm" />
+                  <input value={newPersonBalance} onChange={e => setNewPersonBalance(e.target.value)} placeholder={language === 'bn' ? 'প্রারম্ভিক ব্যালেন্স' : 'Opening Balance'} type="number" className="w-full h-10 px-3 bg-gray-100 dark:bg-gray-800 text-foreground rounded-lg border border-border focus:border-emerald-500 focus:outline-none text-sm" />
+                  <div className="flex gap-2">
+                    <button onClick={() => setShowAddPerson(false)} className="flex-1 py-2 rounded-lg border border-border text-sm font-medium">{language === 'bn' ? 'বাতিল' : 'Cancel'}</button>
+                    <button onClick={addKhataPerson} className="flex-1 py-2 rounded-lg bg-emerald-600 text-white text-sm font-bold active:scale-95 transition-transform">{language === 'bn' ? 'যোগ করুন' : 'Add'}</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Add Transaction Dialog */}
+            {showAddTransaction && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+                <div className="bg-white dark:bg-gray-900 rounded-xl p-4 w-full max-w-sm space-y-3 border border-border">
+                  <h3 className="font-bold text-lg">{language === 'bn' ? 'লেনদেন যোগ করুন' : 'Add Transaction'}</h3>
+                  <input value={txnAmount} onChange={e => setTxnAmount(e.target.value)} placeholder={language === 'bn' ? 'পরিমাণ' : 'Amount'} type="number" className="w-full h-10 px-3 bg-gray-100 dark:bg-gray-800 text-foreground rounded-lg border border-border focus:border-emerald-500 focus:outline-none text-sm" />
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={() => setTxnType('credit')} className={`py-2 rounded-lg text-sm font-bold transition-colors ${txnType === 'credit' ? 'bg-emerald-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-muted-foreground border border-border'}`}>{language === 'bn' ? 'ক্রেডিট (পাওনা)' : 'Credit (Recv)'}</button>
+                    <button onClick={() => setTxnType('debit')} className={`py-2 rounded-lg text-sm font-bold transition-colors ${txnType === 'debit' ? 'bg-red-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-muted-foreground border border-border'}`}>{language === 'bn' ? 'ডেবিট (দেনা)' : 'Debit (Give)'}</button>
+                  </div>
+                  <input value={txnRemark} onChange={e => setTxnRemark(e.target.value)} placeholder={language === 'bn' ? 'মন্তব্য' : 'Remark'} className="w-full h-10 px-3 bg-gray-100 dark:bg-gray-800 text-foreground rounded-lg border border-border focus:border-emerald-500 focus:outline-none text-sm" />
+                  <input value={txnDate} onChange={e => setTxnDate(e.target.value)} type="date" className="w-full h-10 px-3 bg-gray-100 dark:bg-gray-800 text-foreground rounded-lg border border-border focus:border-emerald-500 focus:outline-none text-sm" />
+                  <div className="flex gap-2">
+                    <button onClick={() => setShowAddTransaction(false)} className="flex-1 py-2 rounded-lg border border-border text-sm font-medium">{language === 'bn' ? 'বাতিল' : 'Cancel'}</button>
+                    <button onClick={addTransaction} className="flex-1 py-2 rounded-lg bg-emerald-600 text-white text-sm font-bold active:scale-95 transition-transform">{language === 'bn' ? 'যোগ করুন' : 'Add'}</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Khata Summary */}
+            {!hideKhataTotal && (
+              <div className="bg-white dark:bg-gray-900 rounded-lg border border-border p-3 grid grid-cols-3 gap-2 text-center">
+                <div><p className="text-[10px] text-muted-foreground">{language === 'bn' ? 'মোট' : 'Total'}</p><p className="font-bold text-sm">{formatCurrency(Math.abs(khataGrandTotal))}</p></div>
+                <div><p className="text-[10px] text-muted-foreground">{language === 'bn' ? 'ক্রেডিট' : 'Credit'}</p><p className="font-bold text-sm text-emerald-500">{formatCurrency(khataTotalCredit)}</p></div>
+                <div><p className="text-[10px] text-muted-foreground">{language === 'bn' ? 'ডেবিট' : 'Debit'}</p><p className="font-bold text-sm text-red-500">{formatCurrency(khataTotalDebit)}</p></div>
+              </div>
+            )}
+          </div>
+        )}
       </div>{/* end scrollable middle */}
 
-      {/* ===== FIXED BOTTOM: GRAND TOTAL + ACTION BUTTONS ===== */}
-      <div className="shrink-0 bg-white dark:bg-gray-900 border-t border-border/50 shadow-[0_-4px_20px_rgba(0,0,0,0.1)] z-30">
-        {/* Grand Total */}
-        <div className="px-3 pt-2 pb-1">
-          <div className="bg-gradient-to-r from-amber-600 to-yellow-500 rounded-lg p-2.5 flex items-center justify-between">
-            <div>
-              <p className="text-amber-100 text-[10px]">{language === 'bn' ? 'গ্র্যান্ড টোটাল' : 'GRAND TOTAL'}</p>
-              <p className="text-white text-xl font-bold">{formatCurrency(total)}</p>
+      {/* ===== FIXED BOTTOM: GRAND TOTAL + ACTION BUTTONS (visible on COUNTER tab) ===== */}
+      {activeTab === 'counter' && (
+        <div className="shrink-0 bg-white dark:bg-gray-900 border-t border-border/50 shadow-[0_-4px_20px_rgba(0,0,0,0.1)] z-30">
+          <div className="px-3 pt-2 pb-1">
+            <div className="bg-gradient-to-r from-amber-600 to-yellow-500 rounded-lg p-2.5 flex items-center justify-between">
+              <div>
+                <p className="text-amber-100 text-[10px]">{language === 'bn' ? 'গ্র্যান্ড টোটাল' : 'GRAND TOTAL'}</p>
+                <p className="text-white text-xl font-bold">{formatCurrency(total)}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-amber-100 text-[10px]">{language === 'bn' ? 'নোট + অন্য + অনলাইন' : 'Cash+Other+Online'}</p>
+                <p className="text-white/80 text-xs">{formatCurrency(cashTotal)} + {formatCurrency(otherAmt)} + {formatCurrency(onlineAmount)}</p>
+              </div>
             </div>
-            <div className="text-right">
-              <p className="text-amber-100 text-[10px]">{language === 'bn' ? 'মোট নোট টাকা' : 'Total Cash'}</p>
-              <p className="text-white/80 text-xs">{formatCurrency(total)}</p>
+          </div>
+          <div className="px-3 pb-2 grid grid-cols-3 gap-2">
+            <button onClick={() => handleSave('in')} className="bg-[#2e7d32] hover:bg-[#388e3c] text-white py-2.5 rounded-lg font-bold text-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-lg">
+              <Download className="w-4 h-4" /> {language === 'bn' ? 'সেভ ইন' : 'Save In'}
+            </button>
+            <button onClick={() => setShowSaved(!showSaved)} className="bg-[#6d4c41] hover:bg-[#795548] text-white py-2.5 rounded-lg font-bold text-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-lg">
+              <Eye className="w-4 h-4" /> {language === 'bn' ? 'এন্ট্রি দেখুন' : 'View Entry'}
+            </button>
+            <button onClick={() => handleSave('out')} className="bg-[#c62828] hover:bg-[#d32f2f] text-white py-2.5 rounded-lg font-bold text-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-lg">
+              <Upload className="w-4 h-4" /> {language === 'bn' ? 'সেভ আউট' : 'Save Out'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ===== BANK HOLIDAYS DIALOG ===== */}
+      {showBankHolidays && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-xl p-4 w-full max-w-sm max-h-[80vh] overflow-y-auto border border-border">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-lg flex items-center gap-2"><CalendarDays className="w-5 h-5 text-emerald-500" />{language === 'bn' ? 'ব্যাংক ছুটি ২০২৬' : 'Bank Holidays 2026'}</h3>
+              <button onClick={() => setShowBankHolidays(false)}><X className="w-5 h-5 text-muted-foreground" /></button>
+            </div>
+            <div className="space-y-2">
+              {bankHolidays.map(h => (
+                <div key={h.date} className="flex items-center gap-3 p-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <span className="text-xs font-bold text-emerald-600 whitespace-nowrap">{new Date(h.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>
+                  <span className="text-sm">{h.name}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
-        {/* Action Buttons */}
-        <div className="px-3 pb-2 grid grid-cols-3 gap-2">
-          <button onClick={() => handleSave('in')} className="bg-[#2e7d32] hover:bg-[#388e3c] text-white py-2.5 rounded-lg font-bold text-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-lg">
-            <Download className="w-4 h-4" /> {language === 'bn' ? 'সেভ ইন' : 'Save In'}
-          </button>
-          <button onClick={() => setShowSaved(!showSaved)} className="bg-[#6d4c41] hover:bg-[#795548] text-white py-2.5 rounded-lg font-bold text-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-lg">
-            <Eye className="w-4 h-4" /> {language === 'bn' ? 'এন্ট্রি দেখুন' : 'View Entry'}
-          </button>
-          <button onClick={() => handleSave('out')} className="bg-[#c62828] hover:bg-[#d32f2f] text-white py-2.5 rounded-lg font-bold text-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-lg">
-            <Upload className="w-4 h-4" /> {language === 'bn' ? 'সেভ আউট' : 'Save Out'}
-          </button>
-        </div>
-      </div>
+      )}
     </div>
   )
 })
@@ -4974,13 +5510,13 @@ const AdMobBanner = memo(function AdMobBanner() {
       try {
         await AdMob.initialize({
           testingDevices: [''],
-          initializeForTesting: true, // TODO: Set to false for production
+          initializeForTesting: false,
         })
         await AdMob.showBanner({
           adId: ADMOB_BANNER_ID,
           adSize: BannerAdSize.ADAPTIVE_BANNER,
           position: BannerAdPosition.BOTTOM_CENTER,
-          isTesting: true, // TODO: Set to false for production
+          isTesting: false,
           margin: 60, // Above bottom nav
         })
         if (mounted) setBannerReady(true)
@@ -5018,7 +5554,7 @@ async function showInterstitialAd() {
     if (!interstitialLoaded) {
       await AdMob.prepareInterstitial({
         adId: ADMOB_INTERSTITIAL_ID,
-        isTesting: true, // TODO: Set to false for production
+        isTesting: false,
       })
       interstitialLoaded = true
     }

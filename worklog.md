@@ -1,67 +1,95 @@
----
-Task ID: 1
-Agent: Main Agent
-Task: Build DailyLife Pro - Complete mobile web app for daily life management
+# Worklog: NoteCounterPage Redesign to "Note Counter Pro"
 
-Work Log:
-- Created Prisma schema with User, Expense, Receivable, Payable, Loan, Account, Note, Plan, Document, Alarm models
-- Pushed schema to SQLite database
-- Created API routes for auth, expenses, receivables, payables, loans, accounts, notes, plans, documents, alarms, admin
-- Built Zustand store for client-side state management and navigation
-- Created API helper utility
-- Built comprehensive single-page app with all features:
-  - Login/Register/Forgot Password authentication
-  - Dashboard with financial overview and quick actions
-  - Expenses tracker with category breakdown
-  - Receivables management with status tracking
-  - Payables management with status tracking
-  - Loan/EMI tracker with payment recording
-  - Accounts management (Bank, Cash, Wallet, etc.)
-  - Tomorrow's Plan with priority levels
-  - Notes with color coding and pinning
-  - Note Counter (Bangladeshi Taka denominations)
-  - Doc Scanner using camera API
-  - DocVault for document storage
-  - Calculator with full arithmetic
-  - Calendar with plan integration
-  - Alarm with repeat options
-  - Tools (PDF to JPEG, PDF Edit, etc.)
-  - Admin Panel with user management and stats
-- Created seed script for admin user (admin@dailylife.com / admin123)
-- Fixed lint errors (set-state-in-effect, naming conflicts)
-- Verified with Agent Browser - all features working correctly
+## Date: 2026-03-04
 
-Stage Summary:
-- Complete mobile-first web app with 15+ features built
-- All CRUD operations working for financial data
-- Authentication with SHA-256 password hashing
-- Admin panel for user management
-- Lint passes, no compilation errors
-- Browser verified: registration, expenses, notes, calculator, note counter all working
+## Task Summary
+Redesigned the NoteCounterPage component (lines 1552-2126 in `src/app/page.tsx`) from a single-page note counter to a 4-tab "Note Counter Pro" application with COUNTER, CALC, BILLING, and KHATA tabs.
 
----
-Task ID: 2
-Agent: Main Agent
-Task: Fix Doc Scanner crop interaction and add magnifier/zoom lens
+## Changes Made
 
-Work Log:
-- Identified root cause: handlePointerMove callback depended on cropCorners state, causing useEffect with global listeners to re-run on every drag move, missing events
-- Added refs (draggingHandleRef, cropCornersRef, editingDocRef, scannedDocsRef) to hold mutable state for stable event listeners
-- Rewrote handlePointerMove to use refs instead of state dependencies - now has empty dependency array []
-- Added setPointerCapture on pointer down for reliable touch/mouse tracking
-- Changed global listeners from conditional (only when draggingHandle set) to always-on with internal ref check
-- Added { passive: false } to pointermove listener to prevent default scroll behavior
-- Fixed magnifier: pre-loaded image via magnifierImgRef instead of creating new Image() on every render
-- Fixed applyCrop: now uses pre-loaded image or waits for Image.onload
-- Fixed rotateImage: same async image loading fix
-- Changed crop handles from <button> to <div> elements to avoid default browser button behavior
-- Increased handle touch targets (48px for corners, 40px for edges)
-- Added touch-none class to image container during crop mode
-- Added cursor-grab / cursor-grabbing styles
-- Improved magnifier styling with rounded-2xl border and better positioning
+### 1. Import Updates
+- Added `DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator` from `@/components/ui/dropdown-menu`
+- Added `Copy` and `Globe` icons from `lucide-react`
 
-Stage Summary:
-- Crop interaction fully fixed - stable event listeners that don't re-create during drag
-- Magnifier/zoom lens now works with pre-loaded image (3.5x zoom with crosshair)
-- Apply crop and rotate now properly wait for image to load before canvas operations
-- Build successful, server deployed on port 3000 (proxied via Caddy on port 81)
+### 2. Green Header with Tab Bar
+- Replaced simple white header with dark green (#006400) header
+- Added "Lokhnath Technical" branding with yellow circular Banknote icon
+- Added "Make Card" button in yellow
+- Added 3-dot dropdown menu (DropdownMenu) with: Share Entry (Image/PDF/Text), Copy Entry Details, Bank Holidays, Language toggle, Give 5 Star
+- Added 4-tab navigation bar: COUNTER, CALC, BILLING, KHATA
+- Active tab highlighted with yellow-400 text and bottom indicator bar
+
+### 3. COUNTER Tab (Enhanced)
+- **Currency note color indicators**: Each denomination row now has a colored left strip (1.5px) matching the reference app color scheme (₹500 green, ₹200 orange, ₹100 purple, ₹50 blue, ₹20 yellow, ₹10 brown, ₹5 green, ₹2 orange, ₹1 purple)
+- **Other Amount field**: Extra input row below denominations with amber color strip for amounts not matching any denomination
+- **Online Amount field**: Input row with +/- buttons (increments of 100) with blue color strip for tracking digital payments separately
+- **Total calculation**: Now includes cash total + other amount + online amount
+- **Enhanced share**: Share text now includes Other Amount and Online Amount sections
+- **Copy Entry Details**: New function to copy entry to clipboard
+- **Bank Holidays dialog**: Shows 2026 bank holidays with bilingual names
+- All existing functionality preserved: denomination counting, Pay/Receivable tally, entry details, save/share, saved entries
+
+### 4. CALC Tab (GST Calculator)
+- Dark calculator theme (black background - bg-gray-950)
+- Display area showing current calculation with expression history
+- **GST buttons**: Two rows of 5 buttons each:
+  - Green row: GST+3%, GST+5%, GST+12%, GST+18%, GST+28% (adds GST to amount)
+  - Red row: GST-3%, GST-5%, GST-12%, GST-18%, GST-28% (subtracts GST from amount)
+- **Function buttons**: EDIT GST, COPY, VIEW, SAVE
+  - EDIT GST: Opens dialog to set custom GST rates (persisted to localStorage)
+  - COPY: Copies result to clipboard
+  - VIEW: Shows calculation history
+  - SAVE: Saves calculation to history
+- Standard calculator keypad: AC, ⌫, %, ÷, 7-9, ×, 4-6, -, 1-3, +, 00, 0, ., =
+- GST rates are customizable and persisted to localStorage
+- History panel with clear option
+
+### 5. BILLING Tab
+- Search bar with date/time display
+- Item list area (shows "Add items" prompt when empty)
+- "ADD ITEMS" button opens a form dialog: Item Name, Quantity, Rate (auto-calculates Amount)
+- Customer info section: Discount %, Customer Name, Mobile Number, Address/Remark
+- Summary bar: Total Units/Qty, Total ₹ amount
+- Bottom action buttons: ADD ITEMS, VIEW BILLS, SAVE BILL
+- Bills saved to localStorage with key 'noteCounterBills'
+- VIEW BILLS shows saved bills list with share/delete options
+- Hindi/Bengali bilingual text support
+
+### 6. KHATA Tab (Account Book)
+- Search bar ("Search by Name, Number...")
+- "HIDE TOTAL" toggle switch
+- Action icons: Filter, Statement, PDF/Excel export (visual placeholders)
+- MoreVertical dropdown menu with: Remove Ads, Set Profile, Diary, Add More Accounts, Customize Message, Bank Holidays, Settings, Export Data, Restore Data, Help & Support
+- Main content: Person list with Credit/Debit balances
+- "Add Person" button to add new person (Name, Mobile, Opening Balance)
+- Each person shows: Total given (Debit), Total received (Credit), Balance
+- Click person to see transaction history with debit/credit breakdown
+- Add transaction: Amount, Type (Credit/Debit), Remark, Date
+- Bottom summary: Total ₹, Total Credit ₹ (green), Total Debit ₹ (red)
+- Data persisted to localStorage with key 'noteCounterKhata'
+- Person search/filter functionality
+
+### 7. Bottom Action Buttons
+- Save In, View Entry, Save Out buttons remain visible only on COUNTER tab
+- Grand total bar shows Cash+Other+Online breakdown
+
+## Data Persistence
+- `noteCounterSaved` - Counter saved entries (existing)
+- `noteCounterCalcHistory` - Calculator history (existing)
+- `noteCounterBills` - Billing saved bills (new)
+- `noteCounterKhata` - Khata persons/transactions (new)
+- `noteCounterGstRates` - Custom GST rates (new)
+
+## Technical Notes
+- Maintained `memo` function component pattern
+- Used existing shadcn/ui components (Button, Input, Card, Dialog, Switch, DropdownMenu)
+- All data uses localStorage for persistence
+- Bengali (bn) and English (en) language support via `useAppStore`
+- No new npm packages added
+- TypeScript strict typing throughout
+- Responsive design with mobile-first approach
+
+## Verification
+- TypeScript compilation: `npx tsc --noEmit` - PASSED (no errors)
+- ESLint: 6 pre-existing errors (no-this-alias), no new errors introduced
+- Dev server: HTTP 200 on localhost:3000
