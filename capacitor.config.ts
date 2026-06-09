@@ -34,7 +34,7 @@ const config: CapacitorConfig = {
       appId: 'ca-app-pub-1742730064755213~7771104412',
       bannerAdId: 'ca-app-pub-1742730064755213/6662912587',
       interstitialAdId: 'ca-app-pub-1742730064755213/6471340896',
-      isTesting: false,
+      isTesting: true,
     },
   },
 };

@@ -4976,13 +4976,13 @@ const AdMobBanner = memo(function AdMobBanner() {
       try {
         await AdMob.initialize({
           testingDevices: [''],
-          initializeForTesting: false,
+          initializeForTesting: true,
         })
         await AdMob.showBanner({
           adId: ADMOB_BANNER_ID,
           adSize: BannerAdSize.ADAPTIVE_BANNER,
           position: BannerAdPosition.BOTTOM_CENTER,
-          isTesting: false,
+          isTesting: true,
           margin: 60, // Above bottom nav
         })
         if (mounted) setBannerReady(true)
@@ -5020,7 +5020,7 @@ async function showInterstitialAd() {
     if (!interstitialLoaded) {
       await AdMob.prepareInterstitial({
         adId: ADMOB_INTERSTITIAL_ID,
-        isTesting: false,
+        isTesting: true,
       })
       interstitialLoaded = true
     }
