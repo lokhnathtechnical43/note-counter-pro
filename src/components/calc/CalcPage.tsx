@@ -509,35 +509,35 @@ export default function CalcPage() {
         </div>
       </div>
 
-      {/* Calculator Keypad - bigger buttons like screenshot */}
-      <div className="shrink-0 px-3 pb-1">
-        <div className="grid grid-cols-4 gap-2">
+      {/* Calculator Keypad - fill remaining space with bigger buttons */}
+      <div className="flex-1 px-3 pb-2 flex flex-col min-h-0">
+        <div className="grid grid-cols-4 gap-2 flex-1" style={{ gridAutoRows: '1fr' }}>
           {/* Row 1: AC, ⌫, %, ÷ */}
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(clear)}
-            className={`h-14 rounded-2xl font-bold text-base flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${isDark ? "text-red-400" : "text-red-500"}`}
+            className={`rounded-2xl font-bold text-lg flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${isDark ? "text-red-400" : "text-red-500"}`}
           >
             AC
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(backspace)}
-            className={`h-14 rounded-2xl font-bold text-base flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${isDark ? "text-red-400" : "text-red-500"}`}
+            className={`rounded-2xl font-bold flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${isDark ? "text-red-400" : "text-red-500"}`}
           >
-            <Delete size={22} />
+            <Delete size={24} />
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(handlePercent)}
-            className={`h-14 rounded-2xl font-bold text-xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${isDark ? "text-amber-400" : "text-amber-600"}`}
+            className={`rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${isDark ? "text-amber-400" : "text-amber-600"}`}
           >
             %
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => calculate("÷"))}
-            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${isDark ? "bg-blue-500/15 border border-blue-400/20 text-blue-400 hover:bg-blue-400/25" : "bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100"}`}
+            className={`rounded-2xl font-bold text-3xl flex items-center justify-center transition-colors ${isDark ? "bg-blue-500/15 border border-blue-400/20 text-blue-400 hover:bg-blue-400/25" : "bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100"}`}
           >
             ÷
           </motion.button>
@@ -546,28 +546,28 @@ export default function CalcPage() {
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => inputDigit("7"))}
-            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
+            className={`rounded-2xl font-bold text-3xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
           >
             7
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => inputDigit("8"))}
-            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
+            className={`rounded-2xl font-bold text-3xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
           >
             8
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => inputDigit("9"))}
-            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
+            className={`rounded-2xl font-bold text-3xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
           >
             9
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => calculate("×"))}
-            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${isDark ? "bg-blue-500/15 border border-blue-400/20 text-blue-400 hover:bg-blue-400/25" : "bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100"}`}
+            className={`rounded-2xl font-bold text-3xl flex items-center justify-center transition-colors ${isDark ? "bg-blue-500/15 border border-blue-400/20 text-blue-400 hover:bg-blue-400/25" : "bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100"}`}
           >
             ×
           </motion.button>
@@ -576,28 +576,28 @@ export default function CalcPage() {
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => inputDigit("4"))}
-            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
+            className={`rounded-2xl font-bold text-3xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
           >
             4
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => inputDigit("5"))}
-            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
+            className={`rounded-2xl font-bold text-3xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
           >
             5
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => inputDigit("6"))}
-            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
+            className={`rounded-2xl font-bold text-3xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
           >
             6
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => calculate("-"))}
-            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${isDark ? "bg-blue-500/15 border border-blue-400/20 text-blue-400 hover:bg-blue-400/25" : "bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100"}`}
+            className={`rounded-2xl font-bold text-3xl flex items-center justify-center transition-colors ${isDark ? "bg-blue-500/15 border border-blue-400/20 text-blue-400 hover:bg-blue-400/25" : "bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100"}`}
           >
             -
           </motion.button>
@@ -606,28 +606,28 @@ export default function CalcPage() {
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => inputDigit("1"))}
-            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
+            className={`rounded-2xl font-bold text-3xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
           >
             1
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => inputDigit("2"))}
-            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
+            className={`rounded-2xl font-bold text-3xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
           >
             2
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => inputDigit("3"))}
-            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
+            className={`rounded-2xl font-bold text-3xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
           >
             3
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => calculate("+"))}
-            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${isDark ? "bg-blue-500/15 border border-blue-400/20 text-blue-400 hover:bg-blue-400/25" : "bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100"}`}
+            className={`rounded-2xl font-bold text-3xl flex items-center justify-center transition-colors ${isDark ? "bg-blue-500/15 border border-blue-400/20 text-blue-400 hover:bg-blue-400/25" : "bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100"}`}
           >
             +
           </motion.button>
@@ -636,28 +636,28 @@ export default function CalcPage() {
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => inputDigit("00"))}
-            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
+            className={`rounded-2xl font-bold text-3xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
           >
             00
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => inputDigit("0"))}
-            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
+            className={`rounded-2xl font-bold text-3xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
           >
             0
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(inputDecimal)}
-            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
+            className={`rounded-2xl font-bold text-3xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
           >
             .
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => calculate("="))}
-            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${
+            className={`rounded-2xl font-bold text-3xl flex items-center justify-center transition-colors ${
               isDark
                 ? "bg-emerald-500/20 text-emerald-400 border border-emerald-400/25 hover:bg-emerald-400/30"
                 : "bg-emerald-500 text-white border border-emerald-500 hover:bg-emerald-600"
