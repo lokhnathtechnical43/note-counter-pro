@@ -4,7 +4,8 @@ import React, { useEffect, useState, useCallback, useRef, useMemo, memo } from '
 import { useAppStore, Page } from '@/lib/store'
 import { useShallow } from 'zustand/react/shallow'
 import apiFetch from '@/lib/api'
-import { AdMob, BannerAdSize, BannerAdPosition, InterstitialAdPluginEvents } from '@capacitor-community/admob'
+// AdMob - only available in native Capacitor app build
+let AdMob: any = null, BannerAdSize: any = null, BannerAdPosition: any = null, InterstitialAdPluginEvents: any = null;
 import { translations, TranslationKey, Lang } from '@/lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -4994,7 +4995,7 @@ const AdMobBanner = memo(function AdMobBanner() {
   const [bannerReady, setBannerReady] = useState(false)
 
   useEffect(() => {
-    if (!isNativeApp()) return
+    if (!isNativeApp() || !AdMob) return
 
     let mounted = true
 
@@ -5021,7 +5022,7 @@ const AdMobBanner = memo(function AdMobBanner() {
 
     return () => {
       mounted = false
-      if (isNativeApp()) {
+      if (isNativeApp() && AdMob) {
         AdMob.removeBanner().catch(() => {})
       }
     }
@@ -5036,7 +5037,7 @@ let interstitialLoaded = false
 let lastInterstitialTime = 0
 
 async function showInterstitialAd() {
-  if (!isNativeApp()) return
+  if (!isNativeApp() || !AdMob) return
   
   // Don't show more than once every 3 minutes
   const now = Date.now()
