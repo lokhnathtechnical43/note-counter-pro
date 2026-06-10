@@ -168,3 +168,57 @@ Fix DailyLife Pro app to work OFFLINE (without internet) by removing the `server
 - The native APK uses localStorage for all data when offline
 - API route files remain in `src/app/api/` for Vercel deployment but are excluded from static export
 - Future builds should use `npm run build:static` for APK builds
+
+---
+
+## 2026-06-10: Build NCP with New Features (Light Mode, Calc Dark Support, Amount Transfer)
+
+### Task
+Build Note Counter Pro APK with new changes: default light mode, calc light/dark support, counter-to-calc amount transfer.
+
+### Steps Performed
+1. **Next.js Build** (`npm run build`): ✅ SUCCESS
+   - Next.js 16.2.7 (Turbopack) compiled in 5.7s
+   - 2 static pages generated (`/` and `/_not-found`)
+   - No TypeScript or compilation errors
+
+2. **Capacitor Sync** (`npx cap sync android`): ✅ SUCCESS
+   - Web assets copied from `out/` to `android/app/src/main/assets/public`
+   - 1 Capacitor plugin synced: `@capacitor-community/admob@8.0.0`
+   - Sync completed in 0.095s
+
+3. **Gradle Build** (`./gradlew assembleDebug`): ✅ SUCCESS
+   - **Issue**: `JAVA_HOME=/home/z/.jdks/jdk-21.0.6` no longer exists on disk
+   - **Fix**: Used `JAVA_HOME=/home/z/jdk/jdk-21.0.11+10` (Temurin JDK 21.0.11+10) — build succeeded
+   - **Issue**: Missing `local.properties` with `sdk.dir` — created it pointing to `/home/z/android-sdk`
+   - Build completed in 2s with 125 tasks (27 executed, 98 up-to-date)
+
+4. **APK Copy**: ✅ SUCCESS
+   - Source: `/home/z/note-counter-pro/android/app/build/outputs/apk/debug/app-debug.apk`
+   - Destination: `/home/z/my-project/download/NoteCounterPro-debug.apk`
+
+5. **Git Commit & Push**: ✅ SUCCESS
+   - Commit: `feat: default light mode, calc light/dark support, counter-to-calc amount transfer`
+   - 5 files changed: CalcPage.tsx, CounterPage.tsx, i18n.ts, storage.ts, store.ts
+   - Pushed to `origin/main` (`0f0f602..20c5b47`)
+
+6. **GitHub Release Update**: ✅ SUCCESS
+   - Old asset ID: 443446655 → deleted (HTTP 204)
+   - New asset uploaded: ID 443470839, state=uploaded
+
+### Final Output
+| Item | Value |
+|------|-------|
+| APK Path | `/home/z/my-project/download/NoteCounterPro-debug.apk` |
+| APK Size | **10,005,549 bytes (~9.54 MB)** |
+| Build Type | Debug |
+| Package ID | `com.lokhnathtechnical.notecounterpro` |
+| JAVA_HOME Used | `/home/z/jdk/jdk-21.0.11+10` |
+| GitHub Release | Release 336664366, Asset ID 443470839 |
+
+### Files Changed in This Build
+- `src/components/calc/CalcPage.tsx` — Light/dark mode support
+- `src/components/counter/CounterPage.tsx` — Amount transfer to calc
+- `src/lib/i18n.ts` — Updated translations
+- `src/lib/storage.ts` — Storage updates
+- `src/lib/store.ts` — Default light mode
