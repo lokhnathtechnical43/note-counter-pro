@@ -349,15 +349,15 @@ export default function CalcPage() {
 
   return (
     <div className={`h-full flex flex-col ${bg}`}>
-      {/* Display Area - EXPANDS to fill available space */}
-      <div className="flex-1 min-h-0 px-4 pt-2 pb-1 flex flex-col">
-        <div className={`rounded-2xl border p-3 flex-1 flex flex-col justify-center space-y-1 ${cardBg}`}>
+      {/* Display Area - compact, result small */}
+      <div className="shrink-0 px-4 pt-2 pb-1 flex flex-col">
+        <div className={`rounded-2xl border p-3 flex flex-col justify-center space-y-1 ${cardBg}`}>
           {/* Expression line */}
-          <div className={`text-right text-sm font-mono h-5 truncate ${textMuted}`}>
+          <div className={`text-right text-xs font-mono h-4 truncate ${textMuted}`}>
             {expression || "\u00A0"}
           </div>
-          {/* Result line - BIGGER */}
-          <div className={`text-right text-4xl font-bold font-mono truncate ${textMain}`}>
+          {/* Result line - compact like screenshot */}
+          <div className={`text-right text-2xl font-bold font-mono truncate ${textMain}`}>
             {formatDisplay(display)}
           </div>
 
@@ -405,11 +405,11 @@ export default function CalcPage() {
                       {gstBreakdown.gstAmount.toLocaleString("en-IN")}
                     </span>
                   </div>
-                  <div className={`flex justify-between text-base pt-1 border-t ${dividerBorder}`}>
+                  <div className={`flex justify-between text-sm pt-1 border-t ${dividerBorder}`}>
                     <span className={`${textSub2} font-semibold`}>
                       {t.totalWithGST}
                     </span>
-                    <span className="text-amber-500 font-bold font-mono text-lg">
+                    <span className="text-amber-500 font-bold font-mono text-base">
                       {gstBreakdown.total.toLocaleString("en-IN")}
                     </span>
                   </div>
@@ -418,15 +418,72 @@ export default function CalcPage() {
             )}
           </AnimatePresence>
         </div>
+      </div>
 
-        {/* Action buttons row - compact */}
-        <div className="shrink-0 flex gap-2 mt-1">
+      {/* GST Buttons Section - like screenshot: green + row, brown - row */}
+      <div className="shrink-0 px-3 py-1.5 space-y-1.5">
+        {/* GST+ row */}
+        <div className="flex gap-1.5">
+          <div className={`w-14 text-[10px] font-bold flex items-center justify-center ${isDark ? "text-green-400/80" : "text-green-600"}`}>
+            GST+
+          </div>
+          {GST_RATES.map((rate) => (
+            <motion.button
+              key={`plus-${rate}`}
+              whileTap={{ scale: 0.9 }}
+              onClick={() => handleButtonPress(() => applyGstPlus(rate))}
+              className={`flex-1 py-2 rounded-xl text-xs font-bold transition-colors ${
+                isDark
+                  ? "bg-green-500/15 border border-green-400/25 text-green-400 hover:bg-green-400/25"
+                  : "bg-green-50 border border-green-200 text-green-600 hover:bg-green-100"
+              }`}
+            >
+              +{rate}%
+            </motion.button>
+          ))}
+        </div>
+        {/* GST- row */}
+        <div className="flex gap-1.5">
+          <div className={`w-14 text-[10px] font-bold flex items-center justify-center ${isDark ? "text-orange-400/80" : "text-orange-600"}`}>
+            GST-
+          </div>
+          {GST_RATES.map((rate) => (
+            <motion.button
+              key={`minus-${rate}`}
+              whileTap={{ scale: 0.9 }}
+              onClick={() => handleButtonPress(() => applyGstMinus(rate))}
+              className={`flex-1 py-2 rounded-xl text-xs font-bold transition-colors ${
+                isDark
+                  ? "bg-orange-500/15 border border-orange-400/25 text-orange-400 hover:bg-orange-400/25"
+                  : "bg-orange-50 border border-orange-200 text-orange-600 hover:bg-orange-100"
+              }`}
+            >
+              -{rate}%
+            </motion.button>
+          ))}
+        </div>
+        {/* Action row: EDIT GST, COPY, VIEW, SAVE like screenshot */}
+        <div className="flex gap-1.5">
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => {
+              setCustomGstRate("");
+              setShowEditGst(true);
+            }}
+            className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-colors ${
+              isDark ? "bg-orange-400/10 border border-orange-400/20 text-orange-400" : "bg-orange-50 border border-orange-200 text-orange-600"
+            }`}
+          >
+            <Edit3 size={11} /> EDIT
+          </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(copyResult)}
-            className={`flex-1 py-1.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1 transition-colors ${btnBg} ${btnBorder} ${textSub2}`}
+            className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-colors ${
+              isDark ? "bg-blue-400/10 border border-blue-400/20 text-blue-400" : "bg-blue-50 border border-blue-200 text-blue-600"
+            }`}
           >
-            <Copy size={11} /> {t.copyResult}
+            <Copy size={11} /> COPY
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
@@ -434,110 +491,53 @@ export default function CalcPage() {
               setHistory(getCalcHistory());
               setShowHistory(true);
             }}
-            className={`flex-1 py-1.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1 transition-colors ${btnBg} ${btnBorder} ${textSub2}`}
+            className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-colors ${
+              isDark ? "bg-blue-400/10 border border-blue-400/20 text-blue-400" : "bg-blue-50 border border-blue-200 text-blue-600"
+            }`}
           >
-            <History size={11} /> {t.viewHistory}
+            <History size={11} /> VIEW
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(saveCalc)}
-            className={`flex-1 py-1.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1 transition-colors ${
-              isDark ? "bg-amber-400/10 border-amber-400/20 text-amber-400 hover:bg-amber-400/20" : "bg-amber-50 border-amber-200 text-amber-600 hover:bg-amber-100"
+            className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-colors ${
+              isDark ? "bg-amber-400/10 border border-amber-400/20 text-amber-400" : "bg-amber-50 border border-amber-200 text-amber-600"
             }`}
           >
-            <Save size={11} /> {t.saveCalc}
+            <Save size={11} /> SAVE
           </motion.button>
         </div>
       </div>
 
-      {/* GST Buttons Section - compact */}
-      <div className="shrink-0 px-4 py-1 space-y-1">
-        {/* GST+ row */}
-        <div className="flex gap-1.5">
-          <div className={`flex-1 text-[10px] font-bold flex items-center pl-1 ${isDark ? "text-green-400/70" : "text-green-600"}`}>
-            {t.gstPlus}
-          </div>
-          {GST_RATES.map((rate) => (
-            <motion.button
-              key={`plus-${rate}`}
-              whileTap={{ scale: 0.9 }}
-              onClick={() => handleButtonPress(() => applyGstPlus(rate))}
-              className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                isDark
-                  ? "bg-green-400/10 border border-green-400/20 text-green-400 hover:bg-green-400/20"
-                  : "bg-green-50 border border-green-200 text-green-600 hover:bg-green-100"
-              }`}
-            >
-              <Plus size={10} className="inline mr-0.5" />
-              {rate}%
-            </motion.button>
-          ))}
-        </div>
-        {/* GST- row */}
-        <div className="flex gap-1.5">
-          <div className={`flex-1 text-[10px] font-bold flex items-center pl-1 ${isDark ? "text-red-400/70" : "text-red-600"}`}>
-            {t.gstMinus}
-          </div>
-          {GST_RATES.map((rate) => (
-            <motion.button
-              key={`minus-${rate}`}
-              whileTap={{ scale: 0.9 }}
-              onClick={() => handleButtonPress(() => applyGstMinus(rate))}
-              className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                isDark
-                  ? "bg-red-400/10 border border-red-400/20 text-red-400 hover:bg-red-400/20"
-                  : "bg-red-50 border border-red-200 text-red-600 hover:bg-red-100"
-              }`}
-            >
-              <Minus size={10} className="inline mr-0.5" />
-              {rate}%
-            </motion.button>
-          ))}
-        </div>
-        {/* Edit GST button */}
-        <motion.button
-          whileTap={{ scale: 0.9 }}
-          onClick={() => {
-            setCustomGstRate("");
-            setShowEditGst(true);
-          }}
-          className={`w-full py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-colors ${btnBg} ${btnBorder} ${
-            isDark ? "text-amber-400" : "text-amber-600"
-          }`}
-        >
-          <Edit3 size={11} /> {t.editGST}
-        </motion.button>
-      </div>
-
-      {/* Calculator Keypad - FIXED at bottom, no empty space */}
-      <div className="shrink-0 px-4 pb-1">
-        <div className="grid grid-cols-4 gap-1.5">
+      {/* Calculator Keypad - bigger buttons like screenshot */}
+      <div className="shrink-0 px-3 pb-1">
+        <div className="grid grid-cols-4 gap-2">
           {/* Row 1: AC, ⌫, %, ÷ */}
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(clear)}
-            className={`h-12 rounded-xl font-bold text-sm flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${isDark ? "text-red-400" : "text-red-500"}`}
+            className={`h-14 rounded-2xl font-bold text-base flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${isDark ? "text-red-400" : "text-red-500"}`}
           >
-            <RotateCcw size={20} />
+            AC
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(backspace)}
-            className={`h-12 rounded-xl font-bold text-sm flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${isDark ? "text-red-400" : "text-red-500"}`}
+            className={`h-14 rounded-2xl font-bold text-base flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${isDark ? "text-red-400" : "text-red-500"}`}
           >
-            <Delete size={20} />
+            <Delete size={22} />
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(handlePercent)}
-            className={`h-12 rounded-xl font-bold text-sm flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${isDark ? "text-amber-400" : "text-amber-600"}`}
+            className={`h-14 rounded-2xl font-bold text-xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${isDark ? "text-amber-400" : "text-amber-600"}`}
           >
-            <Percent size={20} />
+            %
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => calculate("÷"))}
-            className={`h-12 rounded-xl font-bold text-xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${isDark ? "text-amber-400" : "text-amber-600"}`}
+            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${isDark ? "bg-blue-500/15 border border-blue-400/20 text-blue-400 hover:bg-blue-400/25" : "bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100"}`}
           >
             ÷
           </motion.button>
@@ -546,28 +546,28 @@ export default function CalcPage() {
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => inputDigit("7"))}
-            className={`h-12 rounded-xl font-bold text-lg flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
+            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
           >
             7
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => inputDigit("8"))}
-            className={`h-12 rounded-xl font-bold text-lg flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
+            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
           >
             8
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => inputDigit("9"))}
-            className={`h-12 rounded-xl font-bold text-lg flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
+            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
           >
             9
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => calculate("×"))}
-            className={`h-12 rounded-xl font-bold text-xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${isDark ? "text-amber-400" : "text-amber-600"}`}
+            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${isDark ? "bg-blue-500/15 border border-blue-400/20 text-blue-400 hover:bg-blue-400/25" : "bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100"}`}
           >
             ×
           </motion.button>
@@ -576,28 +576,28 @@ export default function CalcPage() {
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => inputDigit("4"))}
-            className={`h-12 rounded-xl font-bold text-lg flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
+            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
           >
             4
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => inputDigit("5"))}
-            className={`h-12 rounded-xl font-bold text-lg flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
+            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
           >
             5
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => inputDigit("6"))}
-            className={`h-12 rounded-xl font-bold text-lg flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
+            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
           >
             6
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => calculate("-"))}
-            className={`h-12 rounded-xl font-bold text-xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${isDark ? "text-amber-400" : "text-amber-600"}`}
+            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${isDark ? "bg-blue-500/15 border border-blue-400/20 text-blue-400 hover:bg-blue-400/25" : "bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100"}`}
           >
             -
           </motion.button>
@@ -606,28 +606,28 @@ export default function CalcPage() {
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => inputDigit("1"))}
-            className={`h-12 rounded-xl font-bold text-lg flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
+            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
           >
             1
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => inputDigit("2"))}
-            className={`h-12 rounded-xl font-bold text-lg flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
+            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
           >
             2
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => inputDigit("3"))}
-            className={`h-12 rounded-xl font-bold text-lg flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
+            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
           >
             3
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => calculate("+"))}
-            className={`h-12 rounded-xl font-bold text-xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${isDark ? "text-amber-400" : "text-amber-600"}`}
+            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${isDark ? "bg-blue-500/15 border border-blue-400/20 text-blue-400 hover:bg-blue-400/25" : "bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100"}`}
           >
             +
           </motion.button>
@@ -636,31 +636,31 @@ export default function CalcPage() {
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => inputDigit("00"))}
-            className={`h-12 rounded-xl font-bold text-lg flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
+            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
           >
             00
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => inputDigit("0"))}
-            className={`h-12 rounded-xl font-bold text-lg flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
+            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
           >
             0
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(inputDecimal)}
-            className={`h-12 rounded-xl font-bold text-lg flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
+            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${btnBg} ${btnBorder} ${btnText}`}
           >
             .
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => handleButtonPress(() => calculate("="))}
-            className={`h-12 rounded-xl font-bold text-xl flex items-center justify-center transition-colors ${
+            className={`h-14 rounded-2xl font-bold text-2xl flex items-center justify-center transition-colors ${
               isDark
-                ? "bg-amber-400/20 text-amber-400 border border-amber-400/20 hover:bg-amber-400/30"
-                : "bg-amber-500 text-white border border-amber-500 hover:bg-amber-600"
+                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-400/25 hover:bg-emerald-400/30"
+                : "bg-emerald-500 text-white border border-emerald-500 hover:bg-emerald-600"
             }`}
           >
             =
