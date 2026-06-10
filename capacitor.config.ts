@@ -4,13 +4,6 @@ const config: CapacitorConfig = {
   appId: 'com.lokhnathtechnical.dailylifepro',
   appName: 'DailyLife Pro',
   webDir: 'out',
-  // Server URL - will load from Vercel deployment
-  server: {
-    // TODO: Replace with your Vercel deployment URL after deploying
-    url: 'https://dailylife-pro.vercel.app',
-    // Allow navigation to external URLs if needed
-    allowNavigation: ['dailylife-pro.vercel.app'],
-  },
   // Android specific settings
   android: {
     // Allow mixed content (HTTP resources on HTTPS page)
