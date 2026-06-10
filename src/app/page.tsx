@@ -296,9 +296,9 @@ export default function HomePage() {
         </div>
       </nav>
 
-      {/* Exit Confirmation Dialog */}
+      {/* Exit Confirmation Dialog - z-[9999] to appear above AdMob banner */}
       <Dialog open={showExitDialog} onOpenChange={setShowExitDialog}>
-        <DialogContent className={`${settings.darkMode ? 'glass-strong border-white/10' : 'bg-white border-slate-200'} max-w-sm`}>
+        <DialogContent className={`${settings.darkMode ? 'glass-strong border-white/10' : 'bg-white border-slate-200'} max-w-sm z-[9999]`} style={{ position: 'fixed', zIndex: 9999 }}>
           <div className="flex flex-col items-center gap-4 py-4">
             <div className={`w-16 h-16 rounded-full flex items-center justify-center ${settings.darkMode ? 'bg-red-500/20' : 'bg-red-50'}`}>
               <svg className="w-8 h-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
