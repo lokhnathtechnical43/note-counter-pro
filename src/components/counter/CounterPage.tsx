@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAppStore } from "@/lib/store";
 import { getCurrency, formatAmount } from "@/lib/currencies";
 import { translations } from "@/lib/i18n";
@@ -92,6 +92,8 @@ export default function CounterPage() {
   const [lastEntry, setLastEntry] = useState<CounterEntry | null>(null);
   const [showBankHolidaysDialog, setShowBankHolidaysDialog] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const topSectionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -105,6 +107,35 @@ export default function CounterPage() {
     return () => {
       viewport.removeEventListener("resize", handleResize);
       viewport.removeEventListener("scroll", handleResize);
+    };
+  }, []);
+
+  // Block browser auto-scroll on input focus and keep top section visible
+  useEffect(() => {
+    const preventScroll = (e: Event) => {
+      // Only prevent if it's an auto scroll from focus, not user scroll
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'SELECT')) {
+        // Scroll the denomination list to show the focused input instead of the whole page
+        requestAnimationFrame(() => {
+          if (topSectionRef.current) {
+            topSectionRef.current.scrollIntoView({ behavior: 'instant', block: 'start' });
+          }
+        });
+      }
+    };
+
+    // Block the browser's scroll-into-view behavior for inputs
+    const blockAutoScroll = () => {
+      window.scrollTo(0, 0);
+    };
+
+    document.addEventListener('focusin', preventScroll);
+    window.addEventListener('scroll', blockAutoScroll, { passive: true });
+
+    return () => {
+      document.removeEventListener('focusin', preventScroll);
+      window.removeEventListener('scroll', blockAutoScroll);
     };
   }, []);
 
@@ -237,13 +268,14 @@ export default function CounterPage() {
 
   return (
     <div
-      className="flex flex-col h-full"
+      ref={containerRef}
+      className="flex flex-col h-full overflow-hidden"
       style={{
         height: keyboardHeight > 0 ? `calc(100vh - ${keyboardHeight}px)` : "100%",
       }}
     >
       {/* Sticky top section */}
-      <div className="shrink-0 space-y-3 pb-2">
+      <div ref={topSectionRef} className="shrink-0 space-y-3 pb-2">
         {/* Currency Selector + Summary */}
         <div className="flex items-center gap-3">
           <Select
