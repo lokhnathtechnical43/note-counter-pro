@@ -159,6 +159,10 @@ export const translations = {
     details: "Details",
     moreOptions: "More Options",
     sentToCalc: "Sent to Calculator",
+    exitApp: "Exit App?",
+    exitAppMsg: "Are you sure you want to exit?",
+    yes: "Yes",
+    no: "No",
   },
   bn: {
     appName: "নোট কাউন্টার প্রো",
@@ -320,6 +324,10 @@ export const translations = {
     details: "বিবরণ",
     moreOptions: "আরো অপশন",
     sentToCalc: "ক্যালকুলেটরে পাঠানো হয়েছে",
+    exitApp: "অ্যাপ থেকে বের হবেন?",
+    exitAppMsg: "আপনি কি নিশ্চিত অ্যাপ থেকে বের হতে চান?",
+    yes: "হ্যাঁ",
+    no: "না",
   },
 } as const;
 

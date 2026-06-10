@@ -112,6 +112,7 @@ export default function HomePage() {
   const t = translations[settings.language];
   const [mounted, setMounted] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showExitDialog, setShowExitDialog] = useState(false);
   const lastBackPressRef = useRef(0);
 
   // Hydrate store from localStorage on mount
@@ -137,6 +138,12 @@ export default function HomePage() {
     if (!isNativeApp()) return;
 
     const backButtonListener = App.addListener('backButton', () => {
+      // If exit dialog is open, close it
+      if (showExitDialog) {
+        setShowExitDialog(false);
+        return;
+      }
+
       // If settings dialog is open, close it
       if (showSettings) {
         setShowSettings(false);
@@ -150,21 +157,14 @@ export default function HomePage() {
         return;
       }
 
-      // Double-press back to exit (within 2 seconds)
-      const now = Date.now();
-      if (now - lastBackPressRef.current < 2000) {
-        // Exit app
-        App.exitApp();
-      } else {
-        lastBackPressRef.current = now;
-        toast('Press back again to exit', { duration: 2000 });
-      }
+      // On Counter tab - show exit confirmation dialog
+      setShowExitDialog(true);
     });
 
     return () => {
       backButtonListener.then(listener => listener.remove()).catch(() => {});
     };
-  }, [showSettings, setActiveTab]);
+  }, [showSettings, showExitDialog, setActiveTab]);
   useEffect(() => {
     if (mounted) {
       const html = document.documentElement;
@@ -295,6 +295,50 @@ export default function HomePage() {
           </button>
         </div>
       </nav>
+
+      {/* Exit Confirmation Dialog */}
+      <Dialog open={showExitDialog} onOpenChange={setShowExitDialog}>
+        <DialogContent className={`${settings.darkMode ? 'glass-strong border-white/10' : 'bg-white border-slate-200'} max-w-sm`}>
+          <div className="flex flex-col items-center gap-4 py-4">
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center ${settings.darkMode ? 'bg-red-500/20' : 'bg-red-50'}`}>
+              <svg className="w-8 h-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="text-center">
+              <h3 className={`text-lg font-bold ${settings.darkMode ? 'text-white' : 'text-slate-900'}`}>
+                {t.exitApp || 'Exit App?'}
+              </h3>
+              <p className={`text-sm mt-1 ${settings.darkMode ? 'text-white/60' : 'text-slate-500'}`}>
+                {t.exitAppMsg || 'Are you sure you want to exit?'}
+              </p>
+            </div>
+            <div className="flex gap-3 w-full">
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setShowExitDialog(false)}
+                className={`flex-1 py-3 rounded-xl font-bold text-sm transition-colors ${
+                  settings.darkMode
+                    ? 'bg-white/10 text-white hover:bg-white/20'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                {t.no || 'No'}
+              </motion.button>
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => {
+                  setShowExitDialog(false);
+                  App.exitApp();
+                }}
+                className="flex-1 py-3 rounded-xl font-bold text-sm bg-red-500 text-white hover:bg-red-600 transition-colors"
+              >
+                {t.yes || 'Yes'}
+              </motion.button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Settings Dialog */}
       <Dialog open={showSettings} onOpenChange={setShowSettings}>
