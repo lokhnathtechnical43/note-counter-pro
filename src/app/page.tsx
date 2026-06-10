@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, memo } from "react";
+import { useEffect, useState, memo, useRef } from "react";
 import { useAppStore } from "@/lib/store";
 import { translations } from "@/lib/i18n";
 import { getSettings } from "@/lib/storage";
@@ -19,7 +19,9 @@ import {
 } from "lucide-react";
 import SettingsPage from "@/components/settings/SettingsPage";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { toast } from "sonner";
 import { AdMob, BannerAdSize, BannerAdPosition } from "@capacitor-community/admob";
+import { App } from "@capacitor/app";
 
 // ============ ADMOB HELPER ============
 const ADMOB_BANNER_ID = 'ca-app-pub-1742730064755213/3078015084'
@@ -110,6 +112,7 @@ export default function HomePage() {
   const t = translations[settings.language];
   const [mounted, setMounted] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const lastBackPressRef = useRef(0);
 
   // Hydrate store from localStorage on mount
   useEffect(() => {
@@ -129,7 +132,39 @@ export default function HomePage() {
     }
   }, [activeTab, mounted]);
 
-  // Apply dark/light mode to html element
+  // Handle Android hardware back button
+  useEffect(() => {
+    if (!isNativeApp()) return;
+
+    const backButtonListener = App.addListener('backButton', () => {
+      // If settings dialog is open, close it
+      if (showSettings) {
+        setShowSettings(false);
+        return;
+      }
+
+      // If not on Counter tab, go back to Counter
+      const currentTab = useAppStore.getState().activeTab;
+      if (currentTab !== 'counter') {
+        setActiveTab('counter');
+        return;
+      }
+
+      // Double-press back to exit (within 2 seconds)
+      const now = Date.now();
+      if (now - lastBackPressRef.current < 2000) {
+        // Exit app
+        App.exitApp();
+      } else {
+        lastBackPressRef.current = now;
+        toast('Press back again to exit', { duration: 2000 });
+      }
+    });
+
+    return () => {
+      backButtonListener.then(listener => listener.remove()).catch(() => {});
+    };
+  }, [showSettings, setActiveTab]);
   useEffect(() => {
     if (mounted) {
       const html = document.documentElement;
