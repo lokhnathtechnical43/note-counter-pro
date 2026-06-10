@@ -41,6 +41,9 @@
     "skills",
     "prisma",
     "download",
-    "upload"
+    "upload",
+    "capacitor.config.ts",
+    "android",
+    "examples"
   ]
 }
