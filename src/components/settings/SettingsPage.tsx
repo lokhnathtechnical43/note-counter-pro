@@ -6,6 +6,7 @@ import { currencies } from "@/lib/currencies";
 import { translations } from "@/lib/i18n";
 import { AppSettings, saveSettings, clearAllData, exportAllData, importData } from "@/lib/storage";
 import { exportBackup, importBackup, getAutoBackup } from "@/lib/backup";
+import { checkPremiumAvailability, purchasePremium, restorePurchases, isPremiumUser } from "@/lib/premium";
 import { isSupabaseConfigured, signIn, signUp, signOut as supaSignOut, getCurrentUser, syncToCloud, syncFromCloud } from "@/lib/supabase";
 import {
   initGoogleDrive,
@@ -57,6 +58,8 @@ import {
   Key,
   CheckCircle2,
   AlertCircle,
+  Crown,
+  Sparkles,
 } from "lucide-react";
 
 export default function SettingsPage() {
@@ -84,6 +87,12 @@ export default function SettingsPage() {
   const [gdriveBackupTime, setGdriveBackupTime] = useState<string | null>(null);
   const [gdriveClientId, setGdriveClientIdLocal] = useState("");
   const [showGdriveSetup, setShowGdriveSetup] = useState(false);
+
+  // Premium state
+  const [premiumLoading, setPremiumLoading] = useState(false);
+  const [premiumRestoring, setPremiumRestoring] = useState(false);
+  const [premiumPrice, setPremiumPrice] = useState<string | null>(null);
+  const [premiumAvailable, setPremiumAvailable] = useState(false);
 
   const supabaseConfigured = isSupabaseConfigured();
 
@@ -115,6 +124,16 @@ export default function SettingsPage() {
     if (clientId) {
       setGdriveClientIdLocal(clientId);
     }
+  }, []);
+
+  // Check Premium availability
+  useEffect(() => {
+    checkPremiumAvailability().then((info) => {
+      setPremiumAvailable(info.available);
+      if (info.price) {
+        setPremiumPrice(info.price);
+      }
+    });
   }, []);
 
   const updateSetting = (key: keyof AppSettings, value: string | boolean) => {
@@ -375,6 +394,41 @@ export default function SettingsPage() {
     toast.success("Google Drive disconnected");
   };
 
+  // Premium handlers
+  const handlePurchasePremium = async () => {
+    setPremiumLoading(true);
+    try {
+      const result = await purchasePremium();
+      if (result.success) {
+        refreshSettings();
+        toast.success(t.premiumSuccess);
+      } else {
+        toast.error(t.premiumError);
+      }
+    } catch {
+      toast.error(t.premiumError);
+    } finally {
+      setPremiumLoading(false);
+    }
+  };
+
+  const handleRestorePremium = async () => {
+    setPremiumRestoring(true);
+    try {
+      const result = await restorePurchases();
+      if (result.restored) {
+        refreshSettings();
+        toast.success(t.premiumRestored);
+      } else {
+        toast.error(t.premiumNotFound);
+      }
+    } catch {
+      toast.error(t.premiumError);
+    } finally {
+      setPremiumRestoring(false);
+    }
+  };
+
   const formatBackupTime = (time: string | null) => {
     if (!time) return "Never";
     try {
@@ -501,6 +555,83 @@ export default function SettingsPage() {
                   </SelectContent>
                 </Select>
               </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Premium / Remove Ads */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.175 }}>
+          <Card className={`border-2 ${settings.isPremium ? 'border-amber-400/40 glass' : 'border-amber-400/20 glass'}`}>
+            <CardContent className="p-4 space-y-3">
+              {settings.isPremium ? (
+                // Already Premium
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-amber-400/20 flex items-center justify-center">
+                    <Crown size={16} className="text-amber-400" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-sm font-bold text-amber-400 flex items-center gap-1.5">
+                      <Sparkles size={14} /> {t.premiumOwned}
+                    </div>
+                    <div className="text-xs text-white/40">{t.premiumFeatures}</div>
+                  </div>
+                  <CheckCircle2 size={20} className="text-amber-400 shrink-0" />
+                </div>
+              ) : (
+                // Not Premium - Show Buy Option
+                <>
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-amber-400/20 flex items-center justify-center">
+                      <Crown size={16} className="text-amber-400" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm font-bold text-amber-400">{t.removeAds}</div>
+                      <div className="text-xs text-white/40">{t.premiumDesc}</div>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2 text-xs text-white/50">
+                      <span className="w-1 h-1 rounded-full bg-amber-400"></span>
+                      {t.premiumFeatures.split('·')[0]?.trim()}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-white/50">
+                      <span className="w-1 h-1 rounded-full bg-amber-400"></span>
+                      {t.premiumFeatures.split('·')[1]?.trim()}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-white/50">
+                      <span className="w-1 h-1 rounded-full bg-amber-400"></span>
+                      {t.premiumFeatures.split('·')[2]?.trim()}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={handlePurchasePremium}
+                      disabled={premiumLoading}
+                      className="flex-1 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 gap-2 font-bold"
+                    >
+                      {premiumLoading ? (
+                        <>{t.premiumPurchasing}</>
+                      ) : (
+                        <>
+                          <Crown size={14} />
+                          {t.premiumBuy} {premiumPrice ? `(${premiumPrice})` : ''}
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={handleRestorePremium}
+                      disabled={premiumRestoring}
+                      className="text-white/40 hover:bg-white/5 gap-1"
+                    >
+                      <RotateCcw size={12} className={premiumRestoring ? "animate-spin" : ""} />
+                      <span className="text-xs">{t.premiumRestore}</span>
+                    </Button>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         </motion.div>

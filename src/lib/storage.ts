@@ -79,6 +79,7 @@ export interface AppSettings {
   darkMode: boolean;
   language: "en" | "bn";
   hideKhataTotal: boolean;
+  isPremium: boolean;
 }
 
 export const defaultSettings: AppSettings = {
@@ -87,6 +88,7 @@ export const defaultSettings: AppSettings = {
   darkMode: false,
   language: "en",
   hideKhataTotal: false,
+  isPremium: false,
 };
 
 export function getEntries(): CounterEntry[] {

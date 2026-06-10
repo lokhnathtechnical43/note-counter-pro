@@ -164,6 +164,21 @@ export const translations = {
     exitBackupWarning: "If you haven't backed up your data, uninstalling the app or losing your phone will permanently delete all your saved entries, bills, and khata records. You will have to start everything from scratch.",
     yesBtn: "Yes",
     noBtn: "No",
+    // Premium
+    goPremium: "প্রিমিয়াম",
+    removeAds: "বিজ্ঞাপন সরান",
+    premiumDesc: "প্রিমিয়ামে বিজ্ঞাপনমুক্ত অভিজ্ঞতা উপভোগ করুন",
+    premiumPrice: "একবার কেনা",
+    premiumBuy: "প্রিমিয়াম কিনুন",
+    premiumOwned: "প্রিমিয়াম সক্রিয়",
+    premiumRestore: "কেনা পুনরুদ্ধার",
+    premiumFeatures: "বিজ্ঞাপনমুক্ত · অগ্রাধিকার সাপোর্ট · ভবিষ্যতের সব ফিচার",
+    premiumSuccess: "প্রিমিয়াম সক্রিয় হয়েছে! বিজ্ঞাপনমুক্ত অভিজ্ঞতা উপভোগ করুন।",
+    premiumError: "কেনা ব্যর্থ হয়েছে। আবার চেষ্টা করুন।",
+    premiumRestoring: "কেনা পুনরুদ্ধার হচ্ছে...",
+    premiumRestored: "প্রিমিয়াম সফলভাবে পুনরুদ্ধার হয়েছে!",
+    premiumNotFound: "কোনো পূর্বের কেনা পাওয়া যায়নি।",
+    premiumPurchasing: "প্রক্রিয়াধীন..."
   },
   bn: {
     appName: "নোট কাউন্টার প্রো",
@@ -330,6 +345,21 @@ export const translations = {
     exitBackupWarning: "আপনি যদি ডাটা ব্যাকআপ না করে থাকেন, তাহলে অ্যাপ আনইনস্টল বা ফোন হারালে আপনার সংরক্ষিত এন্ট্রি, বিল এবং খাতার সব রেকর্ড চিরতরে মুছে যাবে। সবকিছু নতুন করে শুরু করতে হবে।",
     yesBtn: "হ্যাঁ",
     noBtn: "না",
+    // Premium
+    goPremium: "প্রিমিয়াম",
+    removeAds: "বিজ্ঞাপন সরান",
+    premiumDesc: "প্রিমিয়ামে বিজ্ঞাপনমুক্ত অভিজ্ঞতা উপভোগ করুন",
+    premiumPrice: "একবার কেনা",
+    premiumBuy: "প্রিমিয়াম কিনুন",
+    premiumOwned: "প্রিমিয়াম সক্রিয়",
+    premiumRestore: "কেনা পুনরুদ্ধার",
+    premiumFeatures: "বিজ্ঞাপনমুক্ত · অগ্রাধিকার সাপোর্ট · ভবিষ্যতের সব ফিচার",
+    premiumSuccess: "প্রিমিয়াম সক্রিয় হয়েছে! বিজ্ঞাপনমুক্ত অভিজ্ঞতা উপভোগ করুন।",
+    premiumError: "কেনা ব্যর্থ হয়েছে। আবার চেষ্টা করুন।",
+    premiumRestoring: "কেনা পুনরুদ্ধার হচ্ছে...",
+    premiumRestored: "প্রিমিয়াম সফলভাবে পুনরুদ্ধার হয়েছে!",
+    premiumNotFound: "কোনো পূর্বের কেনা পাওয়া যায়নি।",
+    premiumPurchasing: "প্রক্রিয়াধীন..."
   },
 } as const;
 

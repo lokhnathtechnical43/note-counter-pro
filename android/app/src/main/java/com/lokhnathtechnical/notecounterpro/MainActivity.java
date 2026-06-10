@@ -1,5 +1,14 @@
 package com.lokhnathtechnical.notecounterpro;
 
-import com.getcapacitor.BridgeActivity;
+import android.os.Bundle;
 
-public class MainActivity extends BridgeActivity {}
+import com.getcapacitor.BridgeActivity;
+import com.lokhnathtechnical.notecounterpro.plugins.PremiumPlugin;
+
+public class MainActivity extends BridgeActivity {
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(PremiumPlugin.class);
+        super.onCreate(savedInstanceState);
+    }
+}

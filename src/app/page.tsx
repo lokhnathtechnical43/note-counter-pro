@@ -34,11 +34,11 @@ function isNativeApp(): boolean {
 }
 
 // AdMob Banner Component - renders natively, just reserves space in webview
-const AdMobBanner = memo(function AdMobBanner() {
+const AdMobBanner = memo(function AdMobBanner({ isPremium }: { isPremium: boolean }) {
   const [bannerReady, setBannerReady] = useState(false)
 
   useEffect(() => {
-    if (!isNativeApp()) return
+    if (!isNativeApp() || isPremium) return
 
     let mounted = true
 
@@ -77,8 +77,8 @@ const AdMobBanner = memo(function AdMobBanner() {
 let interstitialLoaded = false
 let lastInterstitialTime = 0
 
-async function showInterstitialAd() {
-  if (!isNativeApp()) return
+async function showInterstitialAd(isPremium: boolean) {
+  if (!isNativeApp() || isPremium) return
   
   // Don't show more than once every 3 minutes
   const now = Date.now()
@@ -135,9 +135,9 @@ export default function HomePage() {
   // Show interstitial ad on tab change
   useEffect(() => {
     if (mounted && activeTab !== 'counter') {
-      showInterstitialAd()
+      showInterstitialAd(settings.isPremium)
     }
-  }, [activeTab, mounted]);
+  }, [activeTab, mounted, settings.isPremium]);
 
   // Handle Android hardware back button
   useEffect(() => {
@@ -210,7 +210,7 @@ export default function HomePage() {
   return (
     <div className={`h-screen flex flex-col overflow-hidden ${settings.darkMode ? 'bg-app-gradient' : 'bg-app-gradient-light'}`}>
       {/* AdMob Banner - at TOP, natively rendered */}
-      <AdMobBanner />
+      <AdMobBanner isPremium={settings.isPremium} />
 
       {/* App Header */}
       <header className="shrink-0 px-4 pt-3 pb-2 flex items-center justify-between glass-strong border-b border-white/10">
