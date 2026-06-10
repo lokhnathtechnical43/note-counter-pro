@@ -307,10 +307,10 @@ export default function HomePage() {
             </div>
             <div className="text-center">
               <h3 className={`text-lg font-bold ${settings.darkMode ? 'text-white' : 'text-slate-900'}`}>
-                {t.exitApp || 'Exit App?'}
+                {t.exitApp}
               </h3>
               <p className={`text-sm mt-1 ${settings.darkMode ? 'text-white/60' : 'text-slate-500'}`}>
-                {t.exitAppMsg || 'Are you sure you want to exit?'}
+                {t.exitAppMsg}
               </p>
             </div>
             <div className="flex gap-3 w-full">
@@ -323,7 +323,7 @@ export default function HomePage() {
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
               >
-                {t.no || 'No'}
+                {t.noBtn}
               </motion.button>
               <motion.button
                 whileTap={{ scale: 0.95 }}
@@ -333,7 +333,7 @@ export default function HomePage() {
                 }}
                 className="flex-1 py-3 rounded-xl font-bold text-sm bg-red-500 text-white hover:bg-red-600 transition-colors"
               >
-                {t.yes || 'Yes'}
+                {t.yesBtn}
               </motion.button>
             </div>
           </div>
