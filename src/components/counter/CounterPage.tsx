@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
 import { getCurrency, formatAmount } from "@/lib/currencies";
 import { translations } from "@/lib/i18n";
@@ -91,51 +91,21 @@ export default function CounterPage() {
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [lastEntry, setLastEntry] = useState<CounterEntry | null>(null);
   const [showBankHolidaysDialog, setShowBankHolidaysDialog] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const topSectionRef = useRef<HTMLDivElement>(null);
+  // Track keyboard state - when keyboard is open, hide top section to give more space to notes
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   useEffect(() => {
     const viewport = window.visualViewport;
     if (!viewport) return;
     const handleResize = () => {
       const offsetHeight = window.innerHeight - viewport.height;
-      setKeyboardHeight(offsetHeight > 50 ? offsetHeight : 0);
+      setKeyboardOpen(offsetHeight > 50);
     };
     viewport.addEventListener("resize", handleResize);
     viewport.addEventListener("scroll", handleResize);
     return () => {
       viewport.removeEventListener("resize", handleResize);
       viewport.removeEventListener("scroll", handleResize);
-    };
-  }, []);
-
-  // Block browser auto-scroll on input focus and keep top section visible
-  useEffect(() => {
-    const preventScroll = (e: Event) => {
-      // Only prevent if it's an auto scroll from focus, not user scroll
-      const target = e.target as HTMLElement;
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'SELECT')) {
-        // Scroll the denomination list to show the focused input instead of the whole page
-        requestAnimationFrame(() => {
-          if (topSectionRef.current) {
-            topSectionRef.current.scrollIntoView({ behavior: 'instant', block: 'start' });
-          }
-        });
-      }
-    };
-
-    // Block the browser's scroll-into-view behavior for inputs
-    const blockAutoScroll = () => {
-      window.scrollTo(0, 0);
-    };
-
-    document.addEventListener('focusin', preventScroll);
-    window.addEventListener('scroll', blockAutoScroll, { passive: true });
-
-    return () => {
-      document.removeEventListener('focusin', preventScroll);
-      window.removeEventListener('scroll', blockAutoScroll);
     };
   }, []);
 
@@ -268,14 +238,11 @@ export default function CounterPage() {
 
   return (
     <div
-      ref={containerRef}
-      className="flex flex-col h-full overflow-hidden"
-      style={{
-        height: keyboardHeight > 0 ? `calc(100vh - ${keyboardHeight}px)` : "100%",
-      }}
+      className="flex flex-col h-full overflow-y-auto custom-scrollbar"
     >
-      {/* Sticky top section */}
-      <div ref={topSectionRef} className="shrink-0 space-y-3 pb-2">
+      {/* Top section - auto hides when keyboard is open to give more space to notes */}
+      {!keyboardOpen && (
+      <div className="shrink-0 space-y-3 pb-2">
         {/* Currency Selector + Summary */}
         <div className="flex items-center gap-3">
           <Select
@@ -454,9 +421,10 @@ export default function CounterPage() {
           )}
         </AnimatePresence>
       </div>
+      )}
 
-      {/* Scrollable denomination rows */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 py-2 min-h-0">
+      {/* Denomination rows - scrolls with page */}
+      <div className="space-y-2 py-2">
         {currency.denominations.map((denom) => (
           <DenominationRow key={denom.value} denom={denom} />
         ))}
