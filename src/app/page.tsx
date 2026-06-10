@@ -114,6 +114,12 @@ export default function HomePage() {
   const [showSettings, setShowSettings] = useState(false);
   const [showExitDialog, setShowExitDialog] = useState(false);
   const lastBackPressRef = useRef(0);
+  const showSettingsRef = useRef(showSettings);
+  const showExitDialogRef = useRef(showExitDialog);
+
+  // Keep refs in sync with state
+  showSettingsRef.current = showSettings;
+  showExitDialogRef.current = showExitDialog;
 
   // Hydrate store from localStorage on mount
   useEffect(() => {
@@ -139,13 +145,13 @@ export default function HomePage() {
 
     const backButtonListener = App.addListener('backButton', () => {
       // If exit dialog is open, close it
-      if (showExitDialog) {
+      if (showExitDialogRef.current) {
         setShowExitDialog(false);
         return;
       }
 
       // If settings dialog is open, close it
-      if (showSettings) {
+      if (showSettingsRef.current) {
         setShowSettings(false);
         return;
       }
@@ -164,7 +170,7 @@ export default function HomePage() {
     return () => {
       backButtonListener.then(listener => listener.remove()).catch(() => {});
     };
-  }, [showSettings, showExitDialog, setActiveTab]);
+  }, [setActiveTab]);
   useEffect(() => {
     if (mounted) {
       const html = document.documentElement;
