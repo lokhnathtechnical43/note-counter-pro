@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Note Counter Pro</string>
+    <string name="title_activity_main">Note Counter Pro</string>
+    <string name="package_name">com.lokhnathtechnical.notecounterpro</string>
+    <string name="custom_url_scheme">com.lokhnathtechnical.notecounterpro</string>
+</resources>

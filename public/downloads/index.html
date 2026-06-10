@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lokh Nath Technical - App Downloads</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); color: #e0e0e0; min-height: 100vh; padding: 20px; }
+        .container { max-width: 650px; margin: 0 auto; }
+        h1 { text-align: center; color: #fbbf24; font-size: 1.5rem; margin-bottom: 5px; }
+        .subtitle { text-align: center; color: #999; font-size: 0.85rem; margin-bottom: 25px; }
+        .app-section { margin-bottom: 25px; }
+        .app-title { font-size: 1.1rem; font-weight: bold; margin-bottom: 10px; border-left: 4px solid #fbbf24; padding: 5px 10px; }
+        .app-title.ncp { border-left-color: #34d399; }
+        .app-title.dlp { border-left-color: #60a5fa; }
+        .file-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 16px; margin-bottom: 12px; backdrop-filter: blur(10px); transition: transform 0.2s, border-color 0.2s; }
+        .file-card:hover { transform: translateY(-2px); border-color: #fbbf24; }
+        .file-name { font-weight: bold; font-size: 0.95rem; margin-bottom: 4px; color: #fff; word-break: break-all; }
+        .file-info { font-size: 0.75rem; color: #999; margin-bottom: 10px; }
+        .file-desc { font-size: 0.8rem; color: #bbb; margin-bottom: 10px; }
+        .download-btn { display: inline-flex; align-items: center; gap: 6px; background: linear-gradient(135deg, #34d399, #059669); color: white; border: none; padding: 8px 20px; border-radius: 8px; font-size: 0.85rem; font-weight: bold; cursor: pointer; text-decoration: none; transition: transform 0.2s, box-shadow 0.2s; }
+        .download-btn:hover { transform: scale(1.05); box-shadow: 0 4px 15px rgba(52,211,153,0.4); }
+        .download-btn:active { transform: scale(0.95); }
+        .download-btn.blue { background: linear-gradient(135deg, #60a5fa, #2563eb); }
+        .download-btn.blue:hover { box-shadow: 0 4px 15px rgba(96,165,250,0.4); }
+        .warning { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 10px; padding: 14px; margin-top: 20px; }
+        .warning h3 { color: #f87171; font-size: 0.9rem; margin-bottom: 6px; }
+        .warning p { font-size: 0.8rem; color: #fca5a5; line-height: 1.5; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; margin-left: 6px; }
+        .badge.debug { background: #fbbf24; color: #000; }
+        .badge.release { background: #34d399; color: #000; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Lokh Nath Technical - App Files</h1>
+        <p class="subtitle">Android APK & Play Store Files</p>
+
+        <div class="app-section">
+            <div class="app-title ncp">🟣 Note Counter Pro</div>
+            <div class="file-card">
+                <div class="file-name">📱 NoteCounterPro-debug.apk <span class="badge debug">DEBUG</span></div>
+                <div class="file-info">9.4 MB • Android APK (Debug)</div>
+                <div class="file-desc">ফোনে ইনস্টল করে টেস্ট করুন — AdMob test ads দেখাবে</div>
+                <a href="/NoteCounterPro-debug.apk?XTransformPort=8080" download="NoteCounterPro-debug.apk" class="download-btn">⬇️ ডাউনলোড APK</a>
+            </div>
+        </div>
+
+        <div class="app-section">
+            <div class="app-title dlp">🔵 DailyLife Pro</div>
+            <div class="file-card">
+                <div class="file-name">📱 DailyLifePro-debug.apk <span class="badge debug">DEBUG</span></div>
+                <div class="file-info">9.2 MB • Android APK (Debug)</div>
+                <div class="file-desc">ফোনে ইনস্টল করে টেস্ট করুন — AdMob test ads দেখাবে</div>
+                <a href="/DailyLifePro-debug.apk?XTransformPort=8080" download="DailyLifePro-debug.apk" class="download-btn blue">⬇️ ডাউনলোড APK</a>
+            </div>
+            <div class="file-card">
+                <div class="file-name">📦 dailylife-pro-release.aab <span class="badge release">RELEASE</span></div>
+                <div class="file-info">3.7 MB • Android App Bundle</div>
+                <div class="file-desc">Play Store-এ আপলোড করতে এই ফাইলটা লাগবে</div>
+                <a href="/dailylife-pro-release.aab?XTransformPort=8080" download="dailylife-pro-release.aab" class="download-btn blue">⬇️ ডাউনলোড AAB</a>
+            </div>
+            <div class="file-card">
+                <div class="file-name">🔑 dailylife-pro.keystore</div>
+                <div class="file-info">2.8 KB • App Signing Key</div>
+                <div class="file-desc">অ্যাপ সাইনিং কী — অবশ্যই ব্যাকআপ রাখুন!</div>
+                <a href="/dailylife-pro.keystore?XTransformPort=8080" download="dailylife-pro.keystore" class="download-btn blue">⬇️ ডাউনলোড Keystore</a>
+            </div>
+            <div class="file-card">
+                <div class="file-name">📝 SIGNING-INFO.txt</div>
+                <div class="file-info">Password ও Sign Info</div>
+                <div class="file-desc">Keystore পাসওয়ার্ড ও অন্যান্য তথ্য</div>
+                <a href="/SIGNING-INFO.txt?XTransformPort=8080" download="SIGNING-INFO.txt" class="download-btn blue">⬇️ ডাউনলোড Info</a>
+            </div>
+        </div>
+
+        <div class="warning">
+            <h3>⚠️ সতর্কতা!</h3>
+            <p>• <strong>dailylife-pro.keystore</strong> ফাইলটা কখনো হারাবেন না! হারালে অ্যাপ আপডেট করতে পারবেন না।<br>• Google Drive / Email / USB-তে ব্যাকআপ রাখুন।<br>• Debug APK শুধু টেস্টিং এর জন্য, Play Store-এ আপলোড করবেন না।</p>
+        </div>
+    </div>
+</body>
+</html>
