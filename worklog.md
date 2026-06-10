@@ -111,3 +111,60 @@ Build a debug APK for the Note Counter Pro app located at `/home/z/note-counter-
 
 ### Note for Future NCP Builds
 The system default Java is JRE-only. Use `JAVA_HOME=/home/z/.jdks/jdk-21.0.6` when building the NCP Android project. The Capacitor config has `server.url` pointing to `https://note-counter-pro.vercel.app`, so the debug APK loads the web app from the remote server (not local assets).
+
+---
+
+## 2026-06-10: Fix DLP Offline Support - Bundle Web Files Locally
+
+### Task
+Fix DailyLife Pro app to work OFFLINE (without internet) by removing the `server.url` Capacitor config that loaded the web app from Vercel, and instead bundling web files locally in the APK.
+
+### Changes Made
+
+1. **`capacitor.config.ts`** — Removed the `server` block (url + allowNavigation)
+   - Before: Had `server.url: 'https://dailylife-pro.vercel.app'` and `allowNavigation`
+   - After: No server block — Capacitor loads web assets from the bundled `out/` directory
+
+2. **`next.config.ts`** — Added `output: 'export'`
+   - Enables Next.js static HTML export, generating a self-contained `out/` directory
+   - Required for Capacitor to bundle web files locally in the APK
+
+3. **`src/lib/api.ts`** — Added localStorage fallback for offline/native mode
+   - Added `isNative()` detection (checks for Capacitor global)
+   - Added localStorage CRUD layer (`localCrud`, `localAuth`, `getLocalData`, `setLocalData`)
+   - Auth operations (login/register) now work offline via localStorage with SHA-256 password hashing
+   - All data operations (expenses, receivables, payables, loans, accounts, plans, notes, documents, alarms) fall back to localStorage when API is unavailable
+   - Network-first strategy: tries API fetch, falls back to localStorage on network error
+   - Syncs successful GET responses to localStorage for future offline access
+   - Notifications return empty in offline mode
+
+4. **`package.json`** — Added `build:static` script
+   - Temporarily moves `src/app/api/` out during static export (API routes are incompatible with `output: 'export'`)
+   - Restores API routes after build
+   - Original `build` script unchanged for Vercel deployments
+
+5. **`tsconfig.json`** — Excluded `capacitor.config.ts`, `android/`, and `examples/` from TypeScript compilation
+   - Prevents build errors from uninstalled type packages
+
+6. **`.gitignore`** — Added `out/`, `*.tsbuildinfo`, `_api_backup/`, `jdk/`
+
+### Build Process
+- Static export: Moved API routes out temporarily, ran `next build`, restored API routes
+- Capacitor sync: `npx cap sync android` copied `out/` to Android assets
+- JDK: Downloaded Temurin JDK 21.0.11+10 to `/home/z/jdk/` (system Java was JRE-only)
+- APK build: `JAVA_HOME=/home/z/jdk/jdk-21.0.11+10 ./gradlew assembleDebug`
+
+### Final Output
+| Item | Value |
+|------|-------|
+| APK Path | `/home/z/my-project/download/DailyLifePro-debug.apk` |
+| APK Size | **~27.7 MB** |
+| Build Type | Debug |
+| Offline Mode | ✅ Works without internet |
+| Data Storage | localStorage (offline) / API (when online) |
+
+### Important Notes
+- The web version on Vercel still uses API routes with Prisma DB — no changes to web deployment
+- The native APK uses localStorage for all data when offline
+- API route files remain in `src/app/api/` for Vercel deployment but are excluded from static export
+- Future builds should use `npm run build:static` for APK builds
