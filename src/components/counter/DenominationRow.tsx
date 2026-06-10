@@ -67,8 +67,11 @@ export default function DenominationRow({ denom }: { denom: DenominationDef }) {
       <input
         type="number"
         min="0"
+        inputMode="numeric"
+        enterKeyHint="done"
         value={count || ""}
         onChange={handleInputChange}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
         placeholder="0"
         className="w-14 h-8 text-center bg-white/5 border border-white/10 rounded-lg text-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400/50"
       />

@@ -51,8 +51,11 @@ export default function PayableSection() {
         <input
           type="number"
           min="0"
+          inputMode="numeric"
+          enterKeyHint="done"
           value={targetAmount || ""}
           onChange={(e) => setTargetAmount(parseInt(e.target.value) || 0)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
           placeholder="0"
           className="flex-1 h-9 px-3 bg-white/5 border border-white/10 rounded-lg text-white text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400/50"
         />

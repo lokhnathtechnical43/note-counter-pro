@@ -298,8 +298,11 @@ export default function CounterPage() {
             <Input
               type="number"
               min="0"
+              inputMode="numeric"
+              enterKeyHint="done"
               value={otherAmount || ""}
               onChange={(e) => setOtherAmount(parseFloat(e.target.value) || 0)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
               placeholder={t.otherAmount}
               className="pl-8 bg-white/5 border-white/10 text-cyan-400 text-sm h-9 placeholder:text-cyan-400/40 focus:ring-cyan-400/30 focus:border-cyan-400/30"
             />
@@ -312,8 +315,11 @@ export default function CounterPage() {
             <Input
               type="number"
               min="0"
+              inputMode="numeric"
+              enterKeyHint="done"
               value={onlineAmount || ""}
               onChange={(e) => setOnlineAmount(parseFloat(e.target.value) || 0)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
               placeholder={t.onlineAmount}
               className="pl-8 bg-white/5 border-white/10 text-violet-400 text-sm h-9 placeholder:text-violet-400/40 focus:ring-violet-400/30 focus:border-violet-400/30"
             />
@@ -345,7 +351,9 @@ export default function CounterPage() {
                   />
                   <Input
                     value={category}
+                    enterKeyHint="done"
                     onChange={(e) => setCategory(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
                     placeholder={t.category}
                     className="pl-8 bg-white/5 border-white/10 text-white text-sm h-9"
                   />
@@ -357,7 +365,9 @@ export default function CounterPage() {
                   />
                   <Input
                     value={remark}
+                    enterKeyHint="done"
                     onChange={(e) => setRemark(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
                     placeholder={t.remark}
                     className="pl-8 bg-white/5 border-white/10 text-white text-sm h-9"
                   />
@@ -371,7 +381,9 @@ export default function CounterPage() {
                   />
                   <Input
                     value={personName}
+                    enterKeyHint="done"
                     onChange={(e) => setPersonName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
                     placeholder={t.personName}
                     className="pl-8 bg-white/5 border-white/10 text-white text-sm h-9"
                   />
@@ -383,7 +395,10 @@ export default function CounterPage() {
                   />
                   <Input
                     value={mobileNumber}
+                    type="tel"
+                    enterKeyHint="done"
                     onChange={(e) => setMobileNumber(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
                     placeholder={t.mobileNumber}
                     className="pl-8 bg-white/5 border-white/10 text-white text-sm h-9"
                   />
@@ -396,7 +411,9 @@ export default function CounterPage() {
                 />
                 <Input
                   value={accountNumber}
+                  enterKeyHint="done"
                   onChange={(e) => setAccountNumber(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
                   placeholder={t.accountNumber}
                   className="pl-8 bg-white/5 border-white/10 text-white text-sm h-9"
                 />
