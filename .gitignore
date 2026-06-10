@@ -11,3 +11,4 @@ examples/
 *.db
 android/app/build/
 out/
+public/downloads/*.apk
