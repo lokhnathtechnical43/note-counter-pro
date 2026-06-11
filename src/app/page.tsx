@@ -219,12 +219,12 @@ export default function HomePage() {
   };
 
   return (
-    <div className={`h-screen flex flex-col overflow-hidden ${settings.darkMode ? 'bg-app-gradient' : 'bg-app-gradient-light'}`} style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+    <div className={`h-screen flex flex-col overflow-hidden ${settings.darkMode ? 'bg-app-gradient' : 'bg-app-gradient-light'}`} style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 28px)' }}>
       {/* AdMob Banner - at BOTTOM, natively rendered */}
       <AdMobBanner onBannerHeight={handleBannerHeight} />
 
       {/* App Header */}
-      <header className="shrink-0 px-4 pt-3 pb-2 flex items-center justify-between glass-strong border-b border-white/10">
+      <header className="shrink-0 px-4 pt-4 pb-2 flex items-center justify-between glass-strong border-b border-white/10">
         <div className="flex items-center gap-2.5">
           <img src="/icon-192.png" alt="Logo" className="w-8 h-8 rounded-lg" />
           <div>
@@ -260,7 +260,7 @@ export default function HomePage() {
       </main>
 
       {/* Bottom Navigation - FIXED at bottom, with padding for AdMob banner */}
-      <nav className="shrink-0 glass-strong border-t border-white/10 px-2" style={{ paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + ${bannerHeight}px)`, position: 'sticky', bottom: 0, zIndex: 40 }}>
+      <nav className="shrink-0 glass-strong border-t border-white/10 px-2" style={{ paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + ${bannerHeight}px)`, position: 'sticky', bottom: 0, zIndex: 40, marginBottom: `${bannerHeight}px` }}>
         <div className="flex items-center justify-around py-2">
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
