@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, memo, useRef } from "react";
+import { useEffect, useState, memo, useRef, useCallback } from "react";
 import { useAppStore } from "@/lib/store";
 import { translations } from "@/lib/i18n";
 import { getSettings } from "@/lib/storage";
@@ -33,10 +33,8 @@ function isNativeApp(): boolean {
   return !!(window as any).Capacitor?.isNativePlatform?.()
 }
 
-// AdMob Banner Component - renders natively, just reserves space in webview
-const AdMobBanner = memo(function AdMobBanner() {
-  const [bannerReady, setBannerReady] = useState(false)
-
+// AdMob Banner Component - renders natively at BOTTOM, reserves space in webview
+const AdMobBanner = memo(function AdMobBanner({ onBannerHeight }: { onBannerHeight: (h: number) => void }) {
   useEffect(() => {
     if (!isNativeApp()) return
 
@@ -51,10 +49,16 @@ const AdMobBanner = memo(function AdMobBanner() {
         await AdMob.showBanner({
           adId: ADMOB_BANNER_ID,
           adSize: BannerAdSize.ADAPTIVE_BANNER,
-          position: BannerAdPosition.TOP_CENTER,
+          position: BannerAdPosition.BOTTOM_CENTER,
           isTesting: true,
         })
-        if (mounted) setBannerReady(true)
+        if (mounted) {
+          // Adaptive banner height is typically ~60px on most devices
+          // Use a small delay to let the banner render, then report height
+          setTimeout(() => {
+            if (mounted) onBannerHeight(60)
+          }, 500)
+        }
       } catch (e) {
         console.log('AdMob banner error:', e)
       }
@@ -66,9 +70,10 @@ const AdMobBanner = memo(function AdMobBanner() {
       mounted = false
       if (isNativeApp()) {
         AdMob.removeBanner().catch(() => {})
+        onBannerHeight(0)
       }
     }
-  }, [])
+  }, [onBannerHeight])
 
   return null // Banner is rendered natively by AdMob
 })
@@ -113,9 +118,15 @@ export default function HomePage() {
   const [mounted, setMounted] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showExitDialog, setShowExitDialog] = useState(false);
+  const [bannerHeight, setBannerHeight] = useState(0);
   const lastBackPressRef = useRef(0);
   const showSettingsRef = useRef(showSettings);
   const showExitDialogRef = useRef(showExitDialog);
+
+  // Stable callback for banner height
+  const handleBannerHeight = useCallback((h: number) => {
+    setBannerHeight(h);
+  }, []);
 
   // Keep refs in sync with state
   showSettingsRef.current = showSettings;
@@ -208,9 +219,9 @@ export default function HomePage() {
   };
 
   return (
-    <div className={`h-screen flex flex-col overflow-hidden ${settings.darkMode ? 'bg-app-gradient' : 'bg-app-gradient-light'}`}>
-      {/* AdMob Banner - at TOP, natively rendered */}
-      <AdMobBanner />
+    <div className={`h-screen flex flex-col overflow-hidden ${settings.darkMode ? 'bg-app-gradient' : 'bg-app-gradient-light'}`} style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+      {/* AdMob Banner - at BOTTOM, natively rendered */}
+      <AdMobBanner onBannerHeight={handleBannerHeight} />
 
       {/* App Header */}
       <header className="shrink-0 px-4 pt-3 pb-2 flex items-center justify-between glass-strong border-b border-white/10">
@@ -248,8 +259,8 @@ export default function HomePage() {
         </AnimatePresence>
       </main>
 
-      {/* Bottom Navigation - FIXED at bottom */}
-      <nav className="shrink-0 glass-strong border-t border-white/10 px-2 pb-safe" style={{ position: 'sticky', bottom: 0, zIndex: 40 }}>
+      {/* Bottom Navigation - FIXED at bottom, with padding for AdMob banner */}
+      <nav className="shrink-0 glass-strong border-t border-white/10 px-2" style={{ paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + ${bannerHeight}px)`, position: 'sticky', bottom: 0, zIndex: 40 }}>
         <div className="flex items-center justify-around py-2">
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
