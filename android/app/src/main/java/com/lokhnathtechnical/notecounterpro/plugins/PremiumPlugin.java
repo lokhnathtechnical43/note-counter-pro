@@ -44,33 +44,42 @@ public class PremiumPlugin extends Plugin implements PurchasesUpdatedListener {
     @Override
     public void load() {
         super.load();
-        setupBillingClient();
+        try {
+            setupBillingClient();
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to setup billing client: " + e.getMessage());
+        }
     }
 
     private void setupBillingClient() {
-        billingClient = BillingClient.newBuilder(getContext())
-                .setListener(this)
-                .enablePendingPurchases()
-                .build();
+        try {
+            billingClient = BillingClient.newBuilder(getContext())
+                    .setListener(this)
+                    .enablePendingPurchases()
+                    .build();
 
-        billingClient.startConnection(new BillingClientStateListener() {
-            @Override
-            public void onBillingSetupFinished(BillingResult billingResult) {
-                if (billingResult.getResponseCode() == BillingClient.BillingResponseCode.OK) {
-                    isBillingReady = true;
-                    Log.d(TAG, "Billing client ready");
-                    queryProductDetails();
-                } else {
-                    Log.e(TAG, "Billing setup failed: " + billingResult.getDebugMessage());
+            billingClient.startConnection(new BillingClientStateListener() {
+                @Override
+                public void onBillingSetupFinished(BillingResult billingResult) {
+                    if (billingResult.getResponseCode() == BillingClient.BillingResponseCode.OK) {
+                        isBillingReady = true;
+                        Log.d(TAG, "Billing client ready");
+                        queryProductDetails();
+                    } else {
+                        Log.e(TAG, "Billing setup failed: " + billingResult.getDebugMessage());
+                    }
                 }
-            }
 
-            @Override
-            public void onBillingServiceDisconnected() {
-                isBillingReady = false;
-                Log.d(TAG, "Billing service disconnected");
-            }
-        });
+                @Override
+                public void onBillingServiceDisconnected() {
+                    isBillingReady = false;
+                    Log.d(TAG, "Billing service disconnected");
+                }
+            });
+        } catch (Exception e) {
+            Log.e(TAG, "Billing client setup exception: " + e.getMessage());
+            billingClient = null;
+        }
     }
 
     private void queryProductDetails() {

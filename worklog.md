@@ -289,3 +289,25 @@ Stage Summary:
 - ROOT CAUSE: Java class package mismatch - `dailylifepro` vs `notecounterpro`
 - Fixed APK v2.0.1 uploaded with correct MainActivity package
 - Download: https://github.com/lokhnathtechnical43/note-counter-pro/releases/download/v2.0.1/NoteCounterPro-debug.apk
+---
+Task ID: 4
+Agent: Main Agent
+Task: Fix Note Counter Pro APK not working
+
+Work Log:
+- Diagnosed potential issues causing APK to not work on device
+- Found 3 potential problems:
+  1. `server: { androidScheme: 'https' }` in capacitor.config.ts could cause WebView loading issues on some devices
+  2. PremiumPlugin BillingClient could crash if Google Play Services unavailable
+  3. Deprecated SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN could cause issues on Android 11+
+- Fixed capacitor.config.ts: Removed `server.androidScheme: 'https'` to use default http:// scheme
+- Fixed MainActivity.java: Added try-catch around PremiumPlugin registration and system UI flags
+- Fixed PremiumPlugin.java: Added try-catch around BillingClient setup to prevent crashes
+- For Android 11+: Changed from deprecated setSystemUiVisibility to setDecorFitsSystemWindows(false)
+- Rebuilt debug APK successfully (11MB)
+- Uploaded to GitHub: https://github.com/lokhnathtechnical43/note-counter-pro/releases/download/v1.3.0/NoteCounterPro-debug.apk
+
+Stage Summary:
+- 3 crash-prevention fixes applied
+- New APK uploaded to GitHub v1.3.0 release
+- Download URL: https://github.com/lokhnathtechnical43/note-counter-pro/releases/download/v1.3.0/NoteCounterPro-debug.apk
