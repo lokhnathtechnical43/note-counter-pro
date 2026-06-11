@@ -8,8 +8,9 @@ const config: CapacitorConfig = {
   android: {
     allowMixedContent: false,
   },
-  // Removed androidScheme: 'https' to improve compatibility with older Android WebView versions
-  // The default 'http://' scheme works more reliably across all devices
+  server: {
+    androidScheme: 'https',
+  },
   plugins: {
     SplashScreen: {
       launchShowDuration: 2000,
