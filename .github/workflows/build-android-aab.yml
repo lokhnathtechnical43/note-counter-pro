@@ -1,0 +1,103 @@
+name: Build Android AAB (Production Release)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: 'Version Name (e.g., 2.7.0)'
+        required: true
+        default: '2.7.0'
+      version_code:
+        description: 'Version Code (must be higher than previous)'
+        required: true
+        default: '12'
+
+jobs:
+  build-aab:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: ☕ Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'gradle'
+
+      - name: 🟢 Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: 📦 Install Dependencies
+        run: npm ci
+
+      - name: 🔨 Build Next.js (Static Export)
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+      - name: 🔄 Sync Capacitor
+        run: npx cap sync android
+
+      - name: 🏷️ Update Version Info
+        run: |
+          VERSION_NAME="${{ github.event.inputs.version_name }}"
+          VERSION_CODE="${{ github.event.inputs.version_code }}"
+          
+          echo "📌 Setting versionName: $VERSION_NAME, versionCode: $VERSION_CODE"
+          
+          sed -i "s/versionCode [0-9]*/versionCode $VERSION_CODE/" android/app/build.gradle
+          sed -i "s/versionName \"[0-9.]*\"/versionName \"$VERSION_NAME\"/" android/app/build.gradle
+          
+          echo "✅ Updated build.gradle:"
+          grep -E "versionCode|versionName" android/app/build.gradle
+
+      - name: 🤖 Build Android Release AAB
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew bundleRelease --no-daemon --warning-mode all
+
+      - name: 📋 List Built AAB
+        run: |
+          echo "🔍 Looking for built AAB..."
+          find android/app/build/outputs -name "*.aab" -type f
+          AAB_PATH=$(find android/app/build/outputs -name "*release*.aab" -type f | head -1)
+          if [ -n "$AAB_PATH" ]; then
+            echo "✅ Found AAB: $AAB_PATH"
+            ls -lh "$AAB_PATH"
+          else
+            echo "❌ No release AAB found!"
+            exit 1
+          fi
+
+      - name: 📤 Upload AAB as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: note-counter-pro-release-aab
+          path: android/app/build/outputs/bundle/release/*.aab
+          retention-days: 30
+
+      - name: 📊 Build Summary
+        run: |
+          AAB_PATH=$(find android/app/build/outputs -name "*release*.aab" -type f | head -1)
+          AAB_SIZE=$(ls -lh "$AAB_PATH" | awk '{print $5}')
+          echo "## 📱 Note Counter Pro - AAB Build Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Version** | ${{ github.event.inputs.version_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Version Code** | ${{ github.event.inputs.version_code }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **AAB Size** | $AAB_SIZE |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Build Type** | Release (Signed) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Format** | Android App Bundle (.aab) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Package** | com.lokhnathtechnical.notecounterpro |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📥 Download Instructions" >> $GITHUB_STEP_SUMMARY
+          echo "1. Download the artifact **note-counter-pro-release-aab** from this workflow run" >> $GITHUB_STEP_SUMMARY
+          echo "2. Upload the AAB to Google Play Console → Production → Create Release" >> $GITHUB_STEP_SUMMARY
